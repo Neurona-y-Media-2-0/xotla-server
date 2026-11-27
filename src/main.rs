@@ -24,7 +24,7 @@ use crate::{
             put_admin_policy_handler,
         },
         security::{
-            controller::security_status_handler,
+            controller::{antivirus_scan_handler, security_status_handler},
             inspector::MAX_BODY_BYTES,
             middleware::security_shield_middleware,
         },
@@ -47,6 +47,7 @@ async fn root_info_handler(State(state): State<AppState>) -> Json<Value> {
         "endpoints": {
             "health": "HEAD/GET /v1/health",
             "security_status": "GET /v1/security/status",
+            "antivirus_scan": "POST /v1/security/scan",
             "handshake": "POST /v1/devices/handshake (alias: /v1/devices/register)",
             "devices": "GET /v1/devices",
             "ws": "WS /v1/ws?token=<session_token>",
@@ -86,6 +87,8 @@ async fn main() {
         .route("/v1/health", head(v1_health_handler).get(v1_health_handler))
         .route("/v1/security/status", get(security_status_handler))
         .route("/security/status", get(security_status_handler))
+        .route("/v1/security/scan", post(antivirus_scan_handler))
+        .route("/security/scan", post(antivirus_scan_handler))
         .route("/v1/devices/handshake", post(handshake_handler))
         .route("/v1/devices/register", post(handshake_handler))
         .route("/v1/devices", get(list_devices_handler))

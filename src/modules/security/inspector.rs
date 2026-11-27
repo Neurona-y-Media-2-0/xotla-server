@@ -1,5 +1,6 @@
 // src/modules/security/inspector.rs
 use serde_json::Value;
+use crate::modules::security::antivirus::scan_text_for_viruses;
 
 pub const MAX_BODY_BYTES: usize = 256 * 1024;
 pub const MAX_WS_BYTES: usize = 64 * 1024;
@@ -98,6 +99,8 @@ pub fn inspect_raw_text(input: &str, check_cmd: bool) -> Result<(), (&'static st
     } else if lower.contains('\0') || lower.contains("%00") {
         return Err(("NULL_BYTE_INJECTION", "Null byte blocked"));
     }
+
+    scan_text_for_viruses(input, !check_cmd)?;
 
     Ok(())
 }

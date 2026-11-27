@@ -11,6 +11,7 @@ use axum::{
 use serde_json::{json, Value};
 use crate::{
     modules::security::{
+        antivirus::{check_content_type, check_raw_binary_bytes},
         inspector::{
             inspect_json_value, inspect_raw_text, sanitize_json_value, MAX_BODY_BYTES,
         },
@@ -24,7 +25,7 @@ fn build_block_response(status: StatusCode, category: &str, reason: &str) -> Res
         status,
         Json(json!({
             "status": "BLOCKED",
-            "shield": "XOTLA_WAF_GUARD",
+            "shield": "XOTLA_ANTIVIRUS_AND_WAF",
             "category": category,
             "error": reason
         })),
@@ -50,11 +51,16 @@ fn attach_security_headers(headers: &mut HeaderMap) {
     );
     headers.insert(
         "x-xotla-shield",
-        HeaderValue::from_static("ACTIVE_ENFORCING"),
+        HeaderValue::from_static("ANTIVIRUS_WAF_ACTIVE"),
     );
 }
 
 fn inspect_headers(headers: &HeaderMap) -> Result<(), (&'static str, &'static str)> {
+    let ct = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok());
+    check_content_type(ct)?;
+
     for (name, val) in headers.iter() {
         let key = name.as_str();
         if key == "cookie" || key == "accept" || key == "accept-encoding" {
@@ -128,26 +134,34 @@ pub async fn security_shield_middleware(
         };
 
         if !bytes.is_empty() {
-            let is_sandbox = path.contains("sandbox") || path.contains("telemetry");
-            if let Ok(mut json_val) = serde_json::from_slice::<Value>(&bytes) {
-                if let Err((cat, reason)) = inspect_json_value(&json_val, 0, is_sandbox) {
-                    record_blocked_threat(&state, &client_key, &path, cat, reason).await;
-                    return build_block_response(StatusCode::BAD_REQUEST, cat, reason);
-                }
-                if sanitize_json_value(&mut json_val) {
-                    state
-                        .sanitized_payloads_count
-                        .fetch_add(1, Ordering::Relaxed);
-                }
-                let clean_bytes = serde_json::to_vec(&json_val).unwrap_or_else(|_| bytes.to_vec());
-                let rebuilt = Request::from_parts(parts, Body::from(clean_bytes));
-                let mut resp = next.run(rebuilt).await;
-                attach_security_headers(resp.headers_mut());
-                return resp;
-            } else if let Ok(raw_str) = std::str::from_utf8(&bytes) {
-                if let Err((cat, reason)) = inspect_raw_text(raw_str, !is_sandbox) {
-                    record_blocked_threat(&state, &client_key, &path, cat, reason).await;
-                    return build_block_response(StatusCode::BAD_REQUEST, cat, reason);
+            if let Err((cat, reason)) = check_raw_binary_bytes(&bytes) {
+                record_blocked_threat(&state, &client_key, &path, cat, reason).await;
+                return build_block_response(StatusCode::FORBIDDEN, cat, reason);
+            }
+
+            let is_dedicated_scan = path.ends_with("/security/scan");
+            if !is_dedicated_scan {
+                let is_sandbox = path.contains("sandbox") || path.contains("telemetry");
+                if let Ok(mut json_val) = serde_json::from_slice::<Value>(&bytes) {
+                    if let Err((cat, reason)) = inspect_json_value(&json_val, 0, is_sandbox) {
+                        record_blocked_threat(&state, &client_key, &path, cat, reason).await;
+                        return build_block_response(StatusCode::FORBIDDEN, cat, reason);
+                    }
+                    if sanitize_json_value(&mut json_val) {
+                        state
+                            .sanitized_payloads_count
+                            .fetch_add(1, Ordering::Relaxed);
+                    }
+                    let clean_bytes = serde_json::to_vec(&json_val).unwrap_or_else(|_| bytes.to_vec());
+                    let rebuilt = Request::from_parts(parts, Body::from(clean_bytes));
+                    let mut resp = next.run(rebuilt).await;
+                    attach_security_headers(resp.headers_mut());
+                    return resp;
+                } else if let Ok(raw_str) = std::str::from_utf8(&bytes) {
+                    if let Err((cat, reason)) = inspect_raw_text(raw_str, !is_sandbox) {
+                        record_blocked_threat(&state, &client_key, &path, cat, reason).await;
+                        return build_block_response(StatusCode::FORBIDDEN, cat, reason);
+                    }
                 }
             }
         }
