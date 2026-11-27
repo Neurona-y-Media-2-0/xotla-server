@@ -1,8 +1,12 @@
 use std::path::Path;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
-use crate::modules::devices::dto::{AgentKind, RegisteredDevice};
+use crate::modules::{
+    devices::dto::{AgentKind, RegisteredDevice},
+    telemetry::dto::StoredTelemetryEvent,
+};
 
 pub struct Database {
     db_path: String,
@@ -43,6 +47,20 @@ impl Database {
                 approved INTEGER NOT NULL DEFAULT 1,
                 registered_at TEXT NOT NULL,
                 last_seen TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS telemetry_events (
+                event_id TEXT PRIMARY KEY,
+                event_sha256 TEXT NOT NULL UNIQUE,
+                device_id TEXT NOT NULL,
+                employee_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                threat_score REAL NOT NULL,
+                current_risk_score REAL NOT NULL,
+                risk_level TEXT NOT NULL,
+                raw_payload TEXT NOT NULL,
+                received_at TEXT NOT NULL
             );
             ",
         )
@@ -89,6 +107,82 @@ impl Database {
                 dev.last_seen.to_rfc3339(),
             ],
         );
+    }
+
+    pub fn insert_telemetry_event(&self, evt: &StoredTelemetryEvent, dedup_fingerprint: &str) -> bool {
+        let conn = self.connect();
+        let event_sha256 = sha256_hex(dedup_fingerprint);
+        let payload_str = serde_json::to_string(&evt.raw_payload).unwrap_or_else(|_| "{}".to_string());
+
+        let res = conn.execute(
+            "
+            INSERT INTO telemetry_events (
+                event_id, event_sha256, device_id, employee_id, source,
+                event_type, threat_score, current_risk_score, risk_level,
+                raw_payload, received_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(event_sha256) DO UPDATE SET
+                received_at = excluded.received_at,
+                current_risk_score = excluded.current_risk_score,
+                risk_level = excluded.risk_level
+            ",
+            params![
+                evt.event_id,
+                event_sha256,
+                evt.device_id,
+                evt.employee_id,
+                evt.source,
+                evt.event_type,
+                evt.threat_score,
+                evt.current_risk_score,
+                evt.risk_level,
+                payload_str,
+                evt.received_at.to_rfc3339(),
+            ],
+        );
+
+        res.is_ok()
+    }
+
+    pub fn load_all_events(&self) -> Vec<StoredTelemetryEvent> {
+        let conn = self.connect();
+        let mut stmt = match conn.prepare(
+            "SELECT event_id, device_id, employee_id, source, event_type,
+                    threat_score, current_risk_score, risk_level, raw_payload, received_at
+             FROM telemetry_events
+             ORDER BY received_at ASC
+             LIMIT 500",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        let iter = stmt.query_map([], |row| {
+            let raw_str: String = row.get(8)?;
+            let received_str: String = row.get(9)?;
+            let raw_payload: Value = serde_json::from_str(&raw_str).unwrap_or(Value::Null);
+            let received_at = DateTime::parse_from_rfc3339(&received_str)
+                .map(|d| d.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+
+            Ok(StoredTelemetryEvent {
+                event_id: row.get(0)?,
+                device_id: row.get(1)?,
+                employee_id: row.get(2)?,
+                source: row.get(3)?,
+                event_type: row.get(4)?,
+                threat_score: row.get(5)?,
+                current_risk_score: row.get(6)?,
+                risk_level: row.get(7)?,
+                raw_payload,
+                received_at,
+            })
+        });
+
+        match iter {
+            Ok(rows) => rows.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        }
     }
 
     pub fn load_all_devices(&self) -> Vec<RegisteredDevice> {

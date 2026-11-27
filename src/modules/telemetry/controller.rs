@@ -29,12 +29,30 @@ pub async fn browser_telemetry_handler(
         AgentKind::BrowserExt,
     );
 
+    let url_sha256 = sha256_hex(&payload.details.original_url);
+    let is_web_image = payload.details.original_url.ends_with(".png")
+        || payload.details.original_url.ends_with(".jpg")
+        || payload.details.original_url.ends_with(".jpeg")
+        || payload.details.original_url.ends_with(".webp")
+        || payload.details.original_url.ends_with(".gif");
+
+    if is_web_image {
+        purge_ephemeral_artifact(&payload.details.original_url);
+    }
+
     let anomaly = format!(
-        "Intento de acceso a dominio con caracteres {} ({})",
-        payload.details.detected_script, payload.details.original_url
+        "Intento de acceso a dominio con caracteres {} ({}) [sha256:{}]",
+        payload.details.detected_script,
+        payload.details.original_url,
+        &url_sha256[..12]
     );
 
-    let raw = serde_json::to_value(&payload).unwrap_or(Value::Null);
+    let mut raw = serde_json::to_value(&payload).unwrap_or(Value::Null);
+    if let Some(obj) = raw.as_object_mut() {
+        obj.insert("url_sha256".to_string(), json!(url_sha256));
+        obj.insert("ephemeral_file_purged".to_string(), json!(is_web_image));
+    }
+
     let (event, profile) = evaluate_and_record_event(
         &state,
         &device,
@@ -51,6 +69,7 @@ pub async fn browser_telemetry_handler(
         "event_ingested": true,
         "device_id": device.device_id,
         "event_id": event.event_id,
+        "sha256": url_sha256,
         "current_risk_score": profile.current_risk_score,
         "risk_level": profile.risk_level,
         "ueba_profile": profile

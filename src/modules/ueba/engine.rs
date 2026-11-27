@@ -1,7 +1,7 @@
 use chrono::Utc;
 use serde_json::{json, Value};
-use uuid::Uuid;
 use crate::{
+    db::sha256_hex,
     modules::{
         devices::dto::RegisteredDevice,
         telemetry::dto::StoredTelemetryEvent,
@@ -68,8 +68,23 @@ pub async fn evaluate_and_record_event(
         .profiles
         .insert(device.employee_id.clone(), profile.clone());
 
+    let target_hint = raw_payload
+        .pointer("/details/original_url")
+        .or_else(|| raw_payload.pointer("/sha256"))
+        .or_else(|| raw_payload.pointer("/file_info/sha256"))
+        .or_else(|| raw_payload.pointer("/artifact_sha256"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("generic");
+
+    let dedup_fingerprint = format!(
+        "{}:{}:{}:{}",
+        device.device_id, source, event_type, target_hint
+    );
+    let event_hash = sha256_hex(&dedup_fingerprint);
+    let deterministic_id = format!("evt_{}", &event_hash[..24]);
+
     let stored = StoredTelemetryEvent {
-        event_id: format!("evt_{}", Uuid::new_v4().simple()),
+        event_id: deterministic_id.clone(),
         device_id: device.device_id.clone(),
         employee_id: device.employee_id.clone(),
         source: source.to_string(),
@@ -81,11 +96,17 @@ pub async fn evaluate_and_record_event(
         received_at: Utc::now(),
     };
 
+    state.db.insert_telemetry_event(&stored, &dedup_fingerprint);
+
     {
         let mut events = state.events.write().await;
-        events.push(stored.clone());
-        if events.len() > 500 {
-            events.remove(0);
+        if let Some(existing) = events.iter_mut().find(|e| e.event_id == deterministic_id) {
+            *existing = stored.clone();
+        } else {
+            events.push(stored.clone());
+            if events.len() > 500 {
+                events.remove(0);
+            }
         }
     }
 

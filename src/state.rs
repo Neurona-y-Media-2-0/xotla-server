@@ -42,6 +42,8 @@ impl AppState {
             devices_by_hw.insert(dev.hardware_id.clone(), dev);
         }
 
+        let initial_events = db.load_all_events();
+
         Self {
             config,
             db,
@@ -50,7 +52,7 @@ impl AppState {
             token_to_hw,
             active_ws_sessions: Arc::new(DashMap::new()),
             profiles: Arc::new(DashMap::new()),
-            events: Arc::new(RwLock::new(Vec::new())),
+            events: Arc::new(RwLock::new(initial_events)),
             policy: Arc::new(RwLock::new(ExtensionPolicy::default())),
             policy_audit_log: Arc::new(RwLock::new(Vec::new())),
             admin_sessions: Arc::new(DashMap::new()),
