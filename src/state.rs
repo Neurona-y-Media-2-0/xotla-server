@@ -1,4 +1,8 @@
-use std::sync::Arc;
+// src/state.rs
+use std::{
+    sync::{atomic::AtomicU64, Arc},
+    time::Instant,
+};
 use dashmap::DashMap;
 use tokio::sync::{broadcast, RwLock};
 use crate::{
@@ -7,6 +11,7 @@ use crate::{
     modules::{
         devices::dto::RegisteredDevice,
         policy::dto::{ExtensionPolicy, PolicyAuditEntry},
+        security::dto::BlockedThreatRecord,
         telemetry::dto::StoredTelemetryEvent,
         ueba::model::EmployeeRiskProfile,
     },
@@ -25,6 +30,10 @@ pub struct AppState {
     pub policy: Arc<RwLock<ExtensionPolicy>>,
     pub policy_audit_log: Arc<RwLock<Vec<PolicyAuditEntry>>>,
     pub admin_sessions: Arc<DashMap<String, (String, String)>>,
+    pub rate_limits: Arc<DashMap<String, (u32, Instant)>>,
+    pub blocked_threats: Arc<RwLock<Vec<BlockedThreatRecord>>>,
+    pub blocked_requests_count: Arc<AtomicU64>,
+    pub sanitized_payloads_count: Arc<AtomicU64>,
     pub ws_broadcaster: broadcast::Sender<String>,
 }
 
@@ -56,6 +65,10 @@ impl AppState {
             policy: Arc::new(RwLock::new(ExtensionPolicy::default())),
             policy_audit_log: Arc::new(RwLock::new(Vec::new())),
             admin_sessions: Arc::new(DashMap::new()),
+            rate_limits: Arc::new(DashMap::new()),
+            blocked_threats: Arc::new(RwLock::new(Vec::new())),
+            blocked_requests_count: Arc::new(AtomicU64::new(0)),
+            sanitized_payloads_count: Arc::new(AtomicU64::new(0)),
             ws_broadcaster: tx,
         }
     }

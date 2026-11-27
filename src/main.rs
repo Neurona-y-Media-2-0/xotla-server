@@ -1,11 +1,13 @@
+// src/main.rs
 mod config;
 mod db;
 mod modules;
 mod state;
 
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::{get, head, post},
     Json, Router,
@@ -21,6 +23,11 @@ use crate::{
             demo_phishing_page_handler, get_admin_policy_handler, get_public_policy_handler,
             put_admin_policy_handler,
         },
+        security::{
+            controller::security_status_handler,
+            inspector::MAX_BODY_BYTES,
+            middleware::security_shield_middleware,
+        },
         telemetry::controller::{
             android_sandbox_handler, browser_telemetry_handler, list_events_handler,
             telemetry_batch_handler, windows_sandbox_handler,
@@ -35,9 +42,11 @@ async fn root_info_handler(State(state): State<AppState>) -> Json<Value> {
     Json(json!({
         "status": "OK",
         "service": "xotla-server (AegisQRO Core)",
+        "security_shield": "ACTIVE_ENFORCING",
         "registered_devices": state.devices_by_hw.len(),
         "endpoints": {
             "health": "HEAD/GET /v1/health",
+            "security_status": "GET /v1/security/status",
             "handshake": "POST /v1/devices/handshake (alias: /v1/devices/register)",
             "devices": "GET /v1/devices",
             "ws": "WS /v1/ws?token=<session_token>",
@@ -75,6 +84,8 @@ async fn main() {
         .route("/", get(root_info_handler))
         .route("/health", head(v1_health_handler).get(v1_health_handler))
         .route("/v1/health", head(v1_health_handler).get(v1_health_handler))
+        .route("/v1/security/status", get(security_status_handler))
+        .route("/security/status", get(security_status_handler))
         .route("/v1/devices/handshake", post(handshake_handler))
         .route("/v1/devices/register", post(handshake_handler))
         .route("/v1/devices", get(list_devices_handler))
@@ -101,6 +112,11 @@ async fn main() {
         .route("/ueba/profile/:employee_id", get(get_profile_handler))
         .route("/v1/events", get(list_events_handler))
         .route("/events", get(list_events_handler))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            security_shield_middleware,
+        ))
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(cors)
         .with_state(state);
 
