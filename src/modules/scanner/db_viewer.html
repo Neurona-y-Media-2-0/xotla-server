@@ -184,6 +184,7 @@
       <table>
         <thead>
           <tr>
+            <th>Hora de Escaneo</th>
             <th>Tipo de Archivo</th>
             <th>Formato Real Detectado</th>
             <th>Veredicto</th>
@@ -274,6 +275,7 @@
 
         document.getElementById("artifactsBody").innerHTML = artifacts.map(a => `
           <tr>
+            <td class="muted">${fmtDate(a.scanned_at)}</td>
             <td><strong>${a.file_type}</strong></td>
             <td><span class="mono">${a.detected_magic}</span></td>
             <td><span class="${badgeClass(a.verdict)}">${a.verdict}</span></td>
@@ -287,7 +289,7 @@
             <td><span class="mono" title="${a.artifact_sha256}">${shortSha(a.artifact_sha256)}</span></td>
             <td><span class="badge badge-clean">${a.ephemeral_purged ? "BORRADO (OK)" : "ACTIVO"}</span></td>
           </tr>
-        `).join("") || '<tr><td colspan="8" class="muted">Sin archivos escaneados</td></tr>';
+        `).join("") || '<tr><td colspan="9" class="muted">Sin archivos escaneados</td></tr>';
 
         document.getElementById("eventsBody").innerHTML = events.slice().reverse().map(e => {
           const p = e.raw_payload || {};
