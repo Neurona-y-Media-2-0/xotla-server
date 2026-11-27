@@ -1,54 +1,77 @@
 # xotla-server — AegisQRO Core Backend (Rust)
 
-Servidor central Zero-Trust y motor de perfilado de comportamiento (UEBA) en tiempo real para **AegisQRO** (Hackathon Ciberseguridad BLOQUE Querétaro). Construido en **Rust** con `Axum`, `Tokio`, `WebSockets` y `DashMap`.
+Servidor central Zero-Trust, administrador de políticas de TI y motor de perfilado de comportamiento (UEBA) en tiempo real para **AegisQRO** (Hackathon Ciberseguridad BLOQUE Querétaro). Construido 100% en **Rust** con `Axum`, `Tokio`, `WebSockets` y `DashMap`.
 
 ---
 
-## Arquitectura del Proyecto
+## Servidor en Vivo (AWS EC2 Production)
+
+- **Base URL REST:** `http://54.146.211.248:8080`
+- **Base URL v1:** `http://54.146.211.248:8080/v1`
+- **WebSocket Stream:** `ws://54.146.211.248:8080/v1/ws`
+- **Laboratorio Interactivo de Phishing (Demo):** `http://54.146.211.248:8080/demo-phishing`
+- **Servicio Systemd en AWS:** `xotla-server.service` (auto-restart activo en puerto `8080`)
+
+### Enlaces Rápidos en Vivo
+| Recurso | URL Pública Activa |
+| :--- | :--- |
+| **Índice de Endpoints** | `http://54.146.211.248:8080/` |
+| **Health Check (`HEAD`/`GET`)** | `http://54.146.211.248:8080/v1/health` |
+| **Política TI (Extensión Chrome)** | `http://54.146.211.248:8080/v1/policy` |
+| **Laboratorio de 5 Ataques (Demo)** | `http://54.146.211.248:8080/demo-phishing` |
+| **Handshake Zero-Touch (`POST`)** | `http://54.146.211.248:8080/v1/devices/handshake` |
+| **Fallback Registro (`POST`)** | `http://54.146.211.248:8080/v1/devices/register` |
+| **Dispositivos Registrados (`GET`)** | `http://54.146.211.248:8080/v1/devices` |
+| **Lote Offline SQLite (`POST`)** | `http://54.146.211.248:8080/v1/telemetry/batch` |
+| **Telemetría Extensión Web (`POST`)** | `http://54.146.211.248:8080/v1/telemetry/browser` |
+| **Reporte Windows Sandbox (`POST`)** | `http://54.146.211.248:8080/v1/sandbox/windows` |
+| **Reporte Android Sandbox (`POST`)** | `http://54.146.211.248:8080/v1/sandbox/android` |
+| **Feed de Eventos (`GET`)** | `http://54.146.211.248:8080/v1/events` |
+| **Perfil de Riesgo UEBA (`GET`)** | `http://54.146.211.248:8080/v1/ueba/profile/emp_042` |
+| **WebSocket Tiempo Real (`WS`)** | `ws://54.146.211.248:8080/v1/ws` |
+
+---
+
+## Arquitectura Modular del Proyecto
 
 ```text
 xotla-server/
 ├── Cargo.toml
+├── docs/
+│   ├── ADMIN_POLICY_CONTRACT.md     # Contrato de política TI y panel Admin (Berny)
+│   └── API_CONTRACT_XOTLA.md        # Contrato de sincronización offline-first (Agente / Rafa)
 └── src/
-    ├── main.rs                      # Punto de entrada HTTP REST + WebSockets (0.0.0.0:8080)
-    ├── config.rs                    # Variables de entorno (HOST, PORT, PUBLIC_WS_BASE)
+    ├── main.rs                      # Router HTTP REST + WebSockets en 0.0.0.0:8080
+    ├── config.rs                    # Variables de entorno (HOST, PORT, PUBLIC_WS_BASE, credenciales Admin)
     ├── state.rs                     # Estado concurrente en memoria y canal broadcast WS
     └── modules/
-        ├── devices/                 # Registro e identificación física de dispositivos (Handshake)
-        ├── telemetry/               # Recepción REST de telemetría (Browser, Windows, Android)
+        ├── devices/                 # Registro e identificación física Zero-Touch (Handshake)
+        ├── policy/                  # Política dinámica de TI, login Admin, CSRF, auditoría y /demo-phishing
+        ├── telemetry/               # Recepción REST individual y por lotes (Browser, Windows, Android, Batch)
         ├── ws/                      # Sesiones en tiempo real para Agentes y Dashboard SOC
         └── ueba/                    # Motor de cálculo de riesgo y anomalías por empleado
 ```
 
 ---
 
-## URL Base en AWS
+## 1. Handshake y Auto-Registro de Dispositivos (Zero-Touch)
 
-- **REST API:** `http://54.146.211.248:8080`
-- **WebSocket:** `ws://54.146.211.248:8080/v1/ws`
+Soporta tanto el esquema de los agentes de escritorio/extensión (`hardware_id`) como el agente móvil offline-first (`hardware_uid`).
 
----
+### `POST /v1/devices/handshake` *(Alias: `POST /v1/devices/register`)*
 
-## Flujo de Conexión de Dispositivos y Agentes
+**Request (Formato Agente Móvil / Endpoint):**
+```json
+{
+  "hardware_uid": "0e280d928b8a68e275ca4c270497214a15c0d529b92b868e96c1c156ecf243d6",
+  "platform": "android",
+  "os_version": "Android 14 (API 34)",
+  "device_model": "Pixel 7 / Corporativo",
+  "agent_version": "0.1.0-hackathon"
+}
+```
 
-1. **Handshake Inicial (`POST /v1/devices/handshake`)**:
-   - Cuando un dispositivo (Extensión Web, Agente Windows o Agente Android) enciende o inicia, envía su identificador físico (`hardware_id`).
-   - Si el dispositivo es **desconocido**, el servidor lo registra, genera un `device_id` único (`dev_...`) y le asigna un `session_token` (`xotla_tok_...`).
-   - Si el dispositivo ya es **conocido**, el servidor lo reconoce y devuelve su `device_id` y `session_token` existentes.
-2. **Autenticación en Peticiones Posteriores**:
-   - Los agentes envían el header `X-Session-Token: <session_token>` (o `X-API-Key`) en sus peticiones REST, o se conectan por WebSocket a `ws://54.146.211.248:8080/v1/ws?token=<session_token>`.
-3. **Perfilado UEBA en Tiempo Real**:
-   - Cada evento recibido actualiza el perfil de riesgo del empleado (`current_risk_score`, `risk_level`, `anomalies_detected`, `recommended_action`) y emite un evento en vivo por WebSocket hacia el Dashboard Web SOC.
-
----
-
-## Documentación de Endpoints (API REST & WebSockets)
-
-### 1. Handshake y Registro de Dispositivos
-
-#### `POST /v1/devices/handshake`
-
-**Request:**
+**Request (Formato Agente Desktop / Extensión):**
 ```json
 {
   "hardware_id": "MAC-AA-BB-CC-11-22",
@@ -58,31 +81,79 @@ xotla-server/
   "hostname": "win-qro-01"
 }
 ```
-> Valores válidos para `agent_kind`: `"BROWSER_EXT"`, `"WINDOWS_OS"`, `"ANDROID_AGENT"`.
 
-**Response:**
+**Response (`200 OK`):**
 ```json
 {
-  "status": "NEW_DEVICE_REGISTERED",
+  "status": "ENROLLED_NEW",
   "is_new_device": true,
-  "device_id": "dev_8f91a2c4b012",
+  "device_id": "dev_qro_0e280d92",
+  "internal_device_id": "dev_qro_0e280d92",
   "employee_id": "emp_042",
-  "session_token": "xotla_tok_4c9f8e1a2b3c4d5e6f7a8b9c0d1e2f3a",
+  "assigned_profile": "standard_employee",
+  "current_risk_score": 0.1,
+  "sync_interval_sec": 30,
+  "session_token": "xotla_tok_a4075590cff9489bbb8fa81771085a9c",
   "approved": true,
-  "ws_url": "ws://54.146.211.248:8080/v1/ws?token=xotla_tok_4c9f8e1a2b3c4d5e6f7a8b9c0d1e2f3a"
+  "ws_url": "ws://54.146.211.248:8080/v1/ws?token=xotla_tok_a4075590cff9489bbb8fa81771085a9c"
 }
 ```
-
-#### `GET /v1/devices`
-Lista todos los dispositivos registrados, su estado `online` (`true`/`false`), `device_id`, `employee_id` y `last_seen`.
+> Si el dispositivo ya fue registrado previamente, devuelve `"status": "ENROLLED_EXISTING"` y conserva su `device_id` y `session_token`.
 
 ---
 
-### 2. Telemetría de Agentes (Berny & Rafa)
+## 2. Política Administrada por TI (Extensión de Navegador & Panel Admin)
 
-> Header recomendado en todas las peticiones: `X-Session-Token: <session_token>`
+### `GET /v1/policy` *(Alias: `GET /policy`)*
+Consumido por la extensión de Chrome al arrancar y cada 15 minutos (`Header: X-API-Key: aegis-qro-team-token-2026`).
+```json
+{
+  "version": 1,
+  "trusted_download_hosts": ["tools.empresa.mx", "aegisqro.internal"],
+  "protected_domains": ["apple-support.com", "sat.gob.mx", "bbva.mx", "banorte.com", "aegisqro.internal"],
+  "dangerous_extensions": [".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".wsf", ".js", ".jse", ".hta", ".scr", ".pif", ".reg", ".iso", ".img", ".vhd", ".lnk", ".jar", ".zip"]
+}
+```
 
-#### A. Extensión de Navegador (`POST /v1/telemetry/browser`)
+### Administración de Política (`/admin/*`)
+- **`POST /admin/login`**: Recibe `{"usuario": "admin", "password": "..."}` y emite cookie `aegis_admin_session` (`HttpOnly; SameSite=Strict`) + `csrf_token`.
+- **`POST /admin/logout`**: Invalida la sesión activa.
+- **`GET /admin/policy`**: Devuelve la política actual y la bitácora de auditoría (`audit_log`).
+- **`PUT /admin/policy`**: Actualiza `trusted_download_hosts`, `protected_domains` y/o `dangerous_extensions`, valida formatos e incrementa automáticamente `version`.
+
+---
+
+## 3. Ingestión de Telemetría (Tiempo Real y Lotes Offline)
+
+### A. Sincronización por Lotes SQLite (`POST /v1/telemetry/batch`)
+```json
+{
+  "hardware_uid": "0e280d928b8a68e275ca4c270497214a15c0d529b92b868e96c1c156ecf243d6",
+  "internal_device_id": "dev_qro_0e280d92",
+  "batch_timestamp": "2026-11-27T18:15:00Z",
+  "events": [
+    {
+      "event_id": "evt_test_001",
+      "occurred_at": "2026-11-27T18:00:00Z",
+      "was_offline": true,
+      "category": "APK_INSPECTION",
+      "artifact_sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+      "local_verdict": "BLOCKED",
+      "local_risk_score": 0.89,
+      "details": { "package_name": "com.sat.actualizacion.fiscal" }
+    }
+  ]
+}
+```
+**Response:**
+```json
+{
+  "status": "PROCESSED",
+  "processed_count": 1
+}
+```
+
+### B. Evento de Extensión Web (`POST /v1/telemetry/browser`)
 ```json
 {
   "employee_id": "emp_042",
@@ -99,7 +170,7 @@ Lista todos los dispositivos registrados, su estado `online` (`true`/`false`), `
 }
 ```
 
-#### B. Agente Windows Sandbox (`POST /v1/sandbox/windows`)
+### C. Reporte Windows Sandbox (`POST /v1/sandbox/windows`)
 ```json
 {
   "employee_id": "emp_042",
@@ -122,7 +193,7 @@ Lista todos los dispositivos registrados, su estado `online` (`true`/`false`), `
 }
 ```
 
-#### C. Analizador Android Sandbox (`POST /v1/sandbox/android`)
+### D. Reporte Android Sandbox (`POST /v1/sandbox/android`)
 ```json
 {
   "employee_id": "emp_042",
@@ -145,53 +216,22 @@ Lista todos los dispositivos registrados, su estado `online` (`true`/`false`), `
 
 ---
 
-### 3. Endpoints para la Aplicación Web / Dashboard SOC (Pap)
+## 4. Dashboard SOC y WebSockets en Tiempo Real
 
-#### `GET /v1/ueba/profile/{employee_id}`
-Obtiene el perfil de riesgo calculado en tiempo real para un empleado (ej. `/v1/ueba/profile/emp_042`):
-```json
-{
-  "employee_id": "emp_042",
-  "department": "Contabilidad",
-  "baseline_risk": 0.12,
-  "current_risk_score": 0.88,
-  "risk_level": "CRITICAL",
-  "anomalies_detected": [
-    "Intento de acceso a dominio con caracteres Cyrillic (https://аpple-support.com/login)",
-    "Ejecucion de PowerShell por factura_noviembre.exe fuera del perfil del departamento de Contabilidad",
-    "Descarga de APK (com.sat.actualizacion.fiscal) con permisos de alto riesgo: android.permission.READ_SMS, android.permission.BIND_ACCESSIBILITY_SERVICE, android.permission.SYSTEM_ALERT_WINDOW"
-  ],
-  "recommended_action": "ISOLATE_HOST_AND_REVOKE_SESSION",
-  "total_events": 3,
-  "updated_at": "2026-11-27T14:40:01Z"
-}
-```
-
-#### `GET /v1/events`
-Devuelve la lista cronológica de todos los eventos recibidos y su impacto en el score de riesgo.
-
-#### `WS /v1/ws` (Canal WebSocket en Tiempo Real)
-- **Para el Dashboard Web:** Conectar a `ws://54.146.211.248:8080/v1/ws?role=DASHBOARD` para recibir automáticamente eventos `DEVICE_HANDSHAKE` y `UEBA_EVENT_UPDATE` en vivo.
-- **Para Agentes:** Conectar a `ws://54.146.211.248:8080/v1/ws?token=<session_token>` para mantener estado `online: true` y enviar telemetría en tiempo real:
-```json
-{
-  "source": "WINDOWS_OS",
-  "event_type": "PROCESS_ANOMALY",
-  "threat_score": 0.75,
-  "anomaly": "Proceso sospechoso detectado en memoria",
-  "payload": { "pid": 4120, "cmd": "powershell.exe -nop -w hidden" }
-}
-```
+- **`GET /v1/ueba/profile/{employee_id}`**: Devuelve el score de riesgo consolidado (`baseline_risk`, `current_risk_score`, `risk_level`, `anomalies_detected`, `recommended_action`).
+- **`GET /v1/events`**: Historial completo de eventos recibidos.
+- **`GET /v1/devices`**: Lista de dispositivos registrados y estado `online`.
+- **`WS /v1/ws?role=DASHBOARD`**: Canal en vivo que recibe `DEVICE_HANDSHAKE` y `UEBA_EVENT_UPDATE` automáticamente cada vez que entra telemetría.
 
 ---
 
-## Ejecución Local y en Servidor
+## Administración del Servicio en AWS (`hackbloque`)
 
 ```bash
-cargo run --release
-```
+# Ver estado y logs en vivo en AWS
+ssh hackbloque "sudo systemctl status xotla-server"
+ssh hackbloque "sudo journalctl -u xotla-server -f"
 
-Variables de entorno opcionales:
-- `HOST` (default: `0.0.0.0`)
-- `PORT` (default: `8080`)
-- `PUBLIC_WS_BASE` (default: `ws://54.146.211.248:8080`)
+# Reiniciar el servicio
+ssh hackbloque "sudo systemctl restart xotla-server"
+```
