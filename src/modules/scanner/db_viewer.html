@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AegisQRO — Monitor de Base de Datos y Archivos</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      line-height: 1.5;
+    }
+    header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 16px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .title { font-size: 18px; font-weight: 700; color: #fff; }
+    .subtitle { font-size: 13px; color: #8b949e; }
+    .status-pill {
+      background: #1f6feb22;
+      border: 1px solid #388bfd;
+      color: #58a6ff;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .container { max-width: 1340px; margin: 24px auto; padding: 0 20px 60px; }
+    .grid-top {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .stat-label { font-size: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    .stat-sub { font-size: 12px; color: #8b949e; margin-top: 4px; }
+    h2 {
+      font-size: 16px;
+      margin: 28px 0 12px;
+      color: #f0f6fc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .table-wrap {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      text-align: left;
+    }
+    th {
+      background: #21262d;
+      color: #8b949e;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 12px 16px;
+      border-bottom: 1px solid #30363d;
+    }
+    td {
+      padding: 13px 16px;
+      border-bottom: 1px solid #21262d;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1c2128; }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .badge-malicious, .badge-critical, .badge-blocked, .badge-high_risk {
+      background: #f8514922;
+      color: #ff7b72;
+      border: 1px solid #f8514966;
+    }
+    .badge-suspicious, .badge-high, .badge-medium, .badge-flagged {
+      background: #d2992222;
+      color: #e3b341;
+      border: 1px solid #d2992266;
+    }
+    .badge-clean, .badge-low, .badge-online {
+      background: #2ea04322;
+      color: #3fb950;
+      border: 1px solid #2ea04366;
+    }
+    .mono {
+      font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+      font-size: 12px;
+      color: #79c0ff;
+      background: #0d1117;
+      padding: 3px 7px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+    }
+    .reason-list {
+      margin: 0;
+      padding-left: 16px;
+      color: #c9d1d9;
+      font-size: 13px;
+    }
+    .reason-list li { margin-bottom: 3px; }
+    .muted { color: #8b949e; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="title">AegisQRO — Visor de Base de Datos SQLite en Tiempo Real</div>
+      <div class="subtitle">Dispositivos, Archivos Analizados (SHA-256) y Como se Detectaron</div>
+    </div>
+    <div id="connStatus" class="status-pill">Actualizando cada 3s...</div>
+  </header>
+
+  <main class="container">
+    <div class="grid-top">
+      <div class="stat-card">
+        <div class="stat-label">Dispositivos Registrados</div>
+        <div id="statDevices" class="stat-value">0</div>
+        <div class="stat-sub">Sin duplicados (deduplicacion SHA-256)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Archivos / URLs Escaneados</div>
+        <div id="statArtifacts" class="stat-value">0</div>
+        <div class="stat-sub">Temporales borrados inmediatamente</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Eventos de Telemetria</div>
+        <div id="statEvents" class="stat-value">0</div>
+        <div class="stat-sub">Android + Windows + Extension Web</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Riesgo Empleado (emp_042)</div>
+        <div id="statRisk" class="stat-value">0.12</div>
+        <div id="statAction" class="stat-sub">MONITOR</div>
+      </div>
+    </div>
+
+    <h2>1. Dispositivos Conectados (Tabla: devices)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Device ID</th>
+            <th>Tipo / Plataforma</th>
+            <th>Nombre del Equipo</th>
+            <th>Hardware UID (SHA-256)</th>
+            <th>Empleado</th>
+            <th>Ultima Conexion</th>
+          </tr>
+        </thead>
+        <tbody id="devicesBody"></tbody>
+      </table>
+    </div>
+
+    <h2>2. Archivos y URLs Analizados — Que es y Como se Detecto (Tabla: scanned_artifacts)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tipo de Archivo</th>
+            <th>Formato Real Detectado</th>
+            <th>Veredicto</th>
+            <th>Score</th>
+            <th>Metodo de Deteccion</th>
+            <th>Por que fue detectado / Detalles</th>
+            <th>Hash SHA-256</th>
+            <th>Archivo Temporal</th>
+          </tr>
+        </thead>
+        <tbody id="artifactsBody"></tbody>
+      </table>
+    </div>
+
+    <h2>3. Historial de Eventos Recibidos (Tabla: telemetry_events)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Origen</th>
+            <th>Dispositivo</th>
+            <th>Archivo / URL Enviado</th>
+            <th>Veredicto / Evento</th>
+            <th>Explicacion Clara</th>
+            <th>SHA-256</th>
+          </tr>
+        </thead>
+        <tbody id="eventsBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    function badgeClass(val) {
+      const v = String(val || "").toUpperCase();
+      if (v.includes("MALICIOUS") || v.includes("CRITICAL") || v.includes("BLOCKED") || v.includes("HIGH_RISK")) {
+        return "badge badge-malicious";
+      }
+      if (v.includes("SUSPICIOUS") || v.includes("HIGH") || v.includes("MEDIUM") || v.includes("FLAGGED")) {
+        return "badge badge-suspicious";
+      }
+      return "badge badge-clean";
+    }
+
+    function fmtDate(iso) {
+      if (!iso) return "-";
+      const d = new Date(iso);
+      return d.toLocaleTimeString("es-MX", { hour12: false }) + " (" + d.toLocaleDateString("es-MX") + ")";
+    }
+
+    function shortSha(s) {
+      if (!s) return "-";
+      return s.length > 14 ? s.slice(0, 14) + "..." : s;
+    }
+
+    async function refreshAll() {
+      try {
+        const [devsRes, artsRes, evtsRes, profRes] = await Promise.all([
+          fetch("/v1/devices"),
+          fetch("/v1/scanner/artifacts"),
+          fetch("/v1/events"),
+          fetch("/v1/ueba/profile/emp_042")
+        ]);
+
+        const devices = await devsRes.json();
+        const artifacts = await artsRes.json();
+        const events = await evtsRes.json();
+        const profile = await profRes.json();
+
+        document.getElementById("statDevices").textContent = devices.length;
+        document.getElementById("statArtifacts").textContent = artifacts.length;
+        document.getElementById("statEvents").textContent = events.length;
+        document.getElementById("statRisk").textContent =
+          Number(profile.current_risk_score || 0).toFixed(2) + " (" + profile.risk_level + ")";
+        document.getElementById("statAction").textContent = profile.recommended_action;
+
+        document.getElementById("devicesBody").innerHTML = devices.map(d => `
+          <tr>
+            <td><span class="mono">${d.device_id}</span></td>
+            <td><strong>${d.agent_kind}</strong> <span class="muted">(${d.platform})</span></td>
+            <td>${d.hostname} <span class="muted">${d.os_version}</span></td>
+            <td><span class="mono" title="${d.hardware_id}">${shortSha(d.hardware_id)}</span></td>
+            <td>${d.employee_id} (${d.department})</td>
+            <td>${fmtDate(d.last_seen)}</td>
+          </tr>
+        `).join("") || '<tr><td colspan="6" class="muted">Sin dispositivos</td></tr>';
+
+        document.getElementById("artifactsBody").innerHTML = artifacts.map(a => `
+          <tr>
+            <td><strong>${a.file_type}</strong></td>
+            <td><span class="mono">${a.detected_magic}</span></td>
+            <td><span class="${badgeClass(a.verdict)}">${a.verdict}</span></td>
+            <td><strong>${Number(a.threat_score).toFixed(2)}</strong></td>
+            <td><span class="mono">${a.detection_method}</span></td>
+            <td>
+              <ul class="reason-list">
+                ${(a.detection_reasons || []).map(r => `<li>${r}</li>`).join("")}
+              </ul>
+            </td>
+            <td><span class="mono" title="${a.artifact_sha256}">${shortSha(a.artifact_sha256)}</span></td>
+            <td><span class="badge badge-clean">${a.ephemeral_purged ? "BORRADO (OK)" : "ACTIVO"}</span></td>
+          </tr>
+        `).join("") || '<tr><td colspan="8" class="muted">Sin archivos escaneados</td></tr>';
+
+        document.getElementById("eventsBody").innerHTML = events.slice().reverse().map(e => {
+          const p = e.raw_payload || {};
+          const targetName =
+            p.artifact_name ||
+            (p.apk_info && p.apk_info.package_name) ||
+            (p.file_info && p.file_info.filename) ||
+            (p.details && p.details.original_url) ||
+            e.event_type;
+
+          const sha =
+            p.sha256 ||
+            p.url_sha256 ||
+            (p.apk_info && p.apk_info.sha256) ||
+            (p.file_info && p.file_info.sha256) ||
+            "-";
+
+          let explanation = [];
+          if (p.requested_permissions && p.requested_permissions.length) {
+            explanation = explanation.concat(p.requested_permissions);
+          }
+          if (p.apk_info && p.apk_info.requested_permissions && p.apk_info.requested_permissions.length) {
+            explanation = explanation.concat(p.apk_info.requested_permissions);
+          }
+          if (p.details && p.details.detected_script) {
+            explanation.push("Tipo detectado en Web: " + p.details.detected_script + " (" + p.details.action_taken + ")");
+          }
+          if (explanation.length === 0) {
+            explanation.push("Archivo verificado con score " + Number(e.threat_score).toFixed(2));
+          }
+
+          return `
+            <tr>
+              <td class="muted">${fmtDate(e.received_at)}</td>
+              <td><strong>${e.source}</strong></td>
+              <td><span class="mono">${e.device_id}</span></td>
+              <td><strong>${targetName}</strong></td>
+              <td><span class="${badgeClass(e.event_type)}">${e.event_type}</span></td>
+              <td>
+                <ul class="reason-list">
+                  ${explanation.map(x => `<li>${x}</li>`).join("")}
+                </ul>
+              </td>
+              <td><span class="mono" title="${sha}">${shortSha(sha)}</span></td>
+            </tr>
+          `;
+        }).join("") || '<tr><td colspan="7" class="muted">Sin eventos</td></tr>';
+
+        document.getElementById("connStatus").textContent = "Conectado en vivo · " + new Date().toLocaleTimeString();
+      } catch (err) {
+        document.getElementById("connStatus").textContent = "Reconectando...";
+      }
+    }
+
+    refreshAll();
+    setInterval(refreshAll, 3000);
+  </script>
+</body>
+</html>

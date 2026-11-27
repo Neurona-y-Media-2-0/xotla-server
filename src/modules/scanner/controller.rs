@@ -1,4 +1,8 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    response::Html,
+    Json,
+};
 use crate::{
     modules::scanner::{
         dto::{FileScanRequest, ScannedArtifactRecord},
@@ -6,6 +10,10 @@ use crate::{
     },
     state::AppState,
 };
+
+pub async fn db_viewer_page_handler() -> Html<&'static str> {
+    Html(include_str!("db_viewer.html"))
+}
 
 pub async fn scan_file_handler(
     State(state): State<AppState>,

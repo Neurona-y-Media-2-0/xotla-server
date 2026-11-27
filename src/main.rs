@@ -23,7 +23,9 @@ use crate::{
             demo_phishing_page_handler, get_admin_policy_handler, get_public_policy_handler,
             put_admin_policy_handler,
         },
-        scanner::controller::{list_scanned_artifacts_handler, scan_file_handler},
+        scanner::controller::{
+            db_viewer_page_handler, list_scanned_artifacts_handler, scan_file_handler,
+        },
         security::{
             controller::{antivirus_scan_handler, security_status_handler},
             inspector::MAX_BODY_BYTES,
@@ -113,6 +115,8 @@ async fn main() {
             get(get_admin_policy_handler).put(put_admin_policy_handler),
         )
         .route("/demo-phishing", get(demo_phishing_page_handler))
+        .route("/db", get(db_viewer_page_handler))
+        .route("/v1/db", get(db_viewer_page_handler))
         .route("/factura_noviembre.exe", get(demo_malicious_exe_handler))
         .route("/v1/scanner/inspect", post(scan_file_handler))
         .route("/v1/scanner/artifacts", get(list_scanned_artifacts_handler))
