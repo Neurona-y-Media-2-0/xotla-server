@@ -6,7 +6,7 @@ use crate::{
         telemetry::{
             dto::{
                 AndroidSandboxPayload, BrowserTelemetryPayload, StoredTelemetryEvent,
-                WindowsSandboxPayload,
+                TelemetryBatchRequest, TelemetryBatchResponse, WindowsSandboxPayload,
             },
             middleware::resolve_authenticated_device,
         },
@@ -46,9 +46,12 @@ pub async fn browser_telemetry_handler(
     .await;
 
     Json(json!({
-        "status": "PROCESSED",
+        "status": "ok",
+        "event_ingested": true,
         "device_id": device.device_id,
         "event_id": event.event_id,
+        "current_risk_score": profile.current_risk_score,
+        "risk_level": profile.risk_level,
         "ueba_profile": profile
     }))
 }
@@ -97,9 +100,12 @@ pub async fn windows_sandbox_handler(
     .await;
 
     Json(json!({
-        "status": "PROCESSED",
+        "status": "ok",
+        "sandbox_ingested": true,
         "device_id": device.device_id,
         "event_id": event.event_id,
+        "current_risk_score": profile.current_risk_score,
+        "risk_level": profile.risk_level,
         "ueba_profile": profile
     }))
 }
@@ -136,11 +142,53 @@ pub async fn android_sandbox_handler(
     .await;
 
     Json(json!({
-        "status": "PROCESSED",
+        "status": "ok",
+        "sandbox_ingested": true,
         "device_id": device.device_id,
         "event_id": event.event_id,
+        "current_risk_score": profile.current_risk_score,
+        "risk_level": profile.risk_level,
         "ueba_profile": profile
     }))
+}
+
+pub async fn telemetry_batch_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(batch): Json<TelemetryBatchRequest>,
+) -> Json<TelemetryBatchResponse> {
+    let device = resolve_authenticated_device(
+        &state,
+        &headers,
+        Some(&batch.hardware_uid),
+        Some("emp_042"),
+        AgentKind::AndroidAgent,
+    );
+
+    let count = batch.events.len();
+
+    for evt in batch.events {
+        let anomaly = format!(
+            "[{}] Veredicto {} (score {:.2})",
+            evt.category, evt.local_verdict, evt.local_risk_score
+        );
+        let raw = serde_json::to_value(&evt).unwrap_or(Value::Null);
+        evaluate_and_record_event(
+            &state,
+            &device,
+            &evt.category,
+            &evt.local_verdict,
+            evt.local_risk_score,
+            Some(anomaly),
+            raw,
+        )
+        .await;
+    }
+
+    Json(TelemetryBatchResponse {
+        status: "PROCESSED".to_string(),
+        processed_count: count,
+    })
 }
 
 pub async fn list_events_handler(

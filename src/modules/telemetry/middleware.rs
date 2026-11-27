@@ -24,6 +24,9 @@ pub fn resolve_authenticated_device(
         if let Some(device) = resolve_device_by_id(state, dev_id) {
             return device;
         }
+        if let Some(device) = state.devices_by_hw.get(dev_id) {
+            return device.clone();
+        }
     }
 
     let hw_id = fallback_device_id.unwrap_or("auto_hw_qro").to_string();
@@ -33,9 +36,13 @@ pub fn resolve_authenticated_device(
         state,
         HandshakeRequest {
             hardware_id: hw_id,
-            employee_id: emp_id,
+            employee_id: Some(emp_id),
             department: Some("Contabilidad".to_string()),
-            agent_kind: default_kind,
+            agent_kind: Some(default_kind),
+            platform: None,
+            os_version: None,
+            device_model: None,
+            agent_version: None,
             hostname: Some("auto-enrolled-endpoint".to_string()),
         },
     );

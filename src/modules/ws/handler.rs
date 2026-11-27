@@ -44,9 +44,13 @@ async fn handle_socket(socket: WebSocket, params: WsQueryParams, state: AppState
             &state,
             HandshakeRequest {
                 hardware_id: hw,
-                employee_id: emp,
+                employee_id: Some(emp),
                 department: Some("Contabilidad".to_string()),
-                agent_kind: AgentKind::WindowsOs,
+                agent_kind: Some(AgentKind::WindowsOs),
+                platform: None,
+                os_version: None,
+                device_model: None,
+                agent_version: None,
                 hostname: Some("ws-connected-node".to_string()),
             },
         );

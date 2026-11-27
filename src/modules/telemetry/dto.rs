@@ -72,6 +72,34 @@ pub struct AndroidSandboxPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchTelemetryEvent {
+    pub event_id: String,
+    pub occurred_at: String,
+    #[serde(default)]
+    pub was_offline: bool,
+    pub category: String,
+    pub artifact_sha256: String,
+    pub local_verdict: String,
+    pub local_risk_score: f32,
+    #[serde(default)]
+    pub details: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelemetryBatchRequest {
+    pub hardware_uid: String,
+    pub internal_device_id: String,
+    pub batch_timestamp: String,
+    pub events: Vec<BatchTelemetryEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelemetryBatchResponse {
+    pub status: String,
+    pub processed_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredTelemetryEvent {
     pub event_id: String,
     pub device_id: String,

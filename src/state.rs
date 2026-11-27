@@ -5,6 +5,7 @@ use crate::{
     config::AppConfig,
     modules::{
         devices::dto::RegisteredDevice,
+        policy::dto::{ExtensionPolicy, PolicyAuditEntry},
         telemetry::dto::StoredTelemetryEvent,
         ueba::model::EmployeeRiskProfile,
     },
@@ -19,6 +20,9 @@ pub struct AppState {
     pub active_ws_sessions: Arc<DashMap<String, usize>>,
     pub profiles: Arc<DashMap<String, EmployeeRiskProfile>>,
     pub events: Arc<RwLock<Vec<StoredTelemetryEvent>>>,
+    pub policy: Arc<RwLock<ExtensionPolicy>>,
+    pub policy_audit_log: Arc<RwLock<Vec<PolicyAuditEntry>>>,
+    pub admin_sessions: Arc<DashMap<String, (String, String)>>,
     pub ws_broadcaster: broadcast::Sender<String>,
 }
 
@@ -33,6 +37,9 @@ impl AppState {
             active_ws_sessions: Arc::new(DashMap::new()),
             profiles: Arc::new(DashMap::new()),
             events: Arc::new(RwLock::new(Vec::new())),
+            policy: Arc::new(RwLock::new(ExtensionPolicy::default())),
+            policy_audit_log: Arc::new(RwLock::new(Vec::new())),
+            admin_sessions: Arc::new(DashMap::new()),
             ws_broadcaster: tx,
         }
     }
