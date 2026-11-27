@@ -35,20 +35,54 @@ pub async fn evaluate_and_record_event(
         })
         .clone();
 
-    let weight = match source {
-        "WINDOWS_SANDBOX" => 0.34,
-        "ANDROID_SANDBOX" => 0.28,
-        "BROWSER_EXTENSION" => 0.24,
-        _ => 0.18,
+    let is_minor_flag = event_type.eq_ignore_ascii_case("INSECURE_COOKIE_DETECTED")
+        || raw_payload
+            .pointer("/details/action_taken")
+            .and_then(|v| v.as_str())
+            .map(|a| a.eq_ignore_ascii_case("FLAGGED"))
+            .unwrap_or(false);
+
+    let weight = if is_minor_flag {
+        0.04
+    } else {
+        match source {
+            "WINDOWS_SANDBOX" => 0.34,
+            "ANDROID_SANDBOX" => 0.28,
+            "BROWSER_EXTENSION" => 0.24,
+            _ => 0.18,
+        }
     };
 
-    let delta = threat_score.clamp(0.0, 1.0) * weight;
-    profile.current_risk_score = ((profile.current_risk_score + delta) * 100.0).round() / 100.0;
-    profile.current_risk_score = profile.current_risk_score.clamp(0.12, 0.99);
-    profile.total_events += 1;
+    let target_hint = raw_payload
+        .pointer("/details/original_url")
+        .or_else(|| raw_payload.pointer("/sha256"))
+        .or_else(|| raw_payload.pointer("/file_info/sha256"))
+        .or_else(|| raw_payload.pointer("/artifact_sha256"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("generic");
+
+    let dedup_fingerprint = format!(
+        "{}:{}:{}:{}",
+        device.device_id, source, event_type, target_hint
+    );
+    let event_hash = sha256_hex(&dedup_fingerprint);
+    let deterministic_id = format!("evt_{}", &event_hash[..24]);
+
+    let already_recorded = {
+        let events = state.events.read().await;
+        events.iter().any(|e| e.event_id == deterministic_id)
+    };
+
+    if !already_recorded {
+        let delta = threat_score.clamp(0.0, 1.0) * weight;
+        profile.current_risk_score =
+            ((profile.current_risk_score + delta) * 100.0).round() / 100.0;
+        profile.current_risk_score = profile.current_risk_score.clamp(0.12, 0.99);
+        profile.total_events += 1;
+    }
 
     if let Some(desc) = anomaly_description {
-        if threat_score >= 0.45 && !profile.anomalies_detected.contains(&desc) {
+        if !is_minor_flag && threat_score >= 0.45 && !profile.anomalies_detected.contains(&desc) {
             profile.anomalies_detected.push(desc);
         }
     }
@@ -67,21 +101,6 @@ pub async fn evaluate_and_record_event(
     state
         .profiles
         .insert(device.employee_id.clone(), profile.clone());
-
-    let target_hint = raw_payload
-        .pointer("/details/original_url")
-        .or_else(|| raw_payload.pointer("/sha256"))
-        .or_else(|| raw_payload.pointer("/file_info/sha256"))
-        .or_else(|| raw_payload.pointer("/artifact_sha256"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("generic");
-
-    let dedup_fingerprint = format!(
-        "{}:{}:{}:{}",
-        device.device_id, source, event_type, target_hint
-    );
-    let event_hash = sha256_hex(&dedup_fingerprint);
-    let deterministic_id = format!("evt_{}", &event_hash[..24]);
 
     let stored = StoredTelemetryEvent {
         event_id: deterministic_id.clone(),
