@@ -22,13 +22,15 @@ pub async fn security_status_handler(
 ) -> Json<SecurityShieldStats> {
     let blocked = state.blocked_threats.read().await.clone();
     Json(SecurityShieldStats {
-        status: "ANTIVIRUS_AND_WAF_ACTIVE".to_string(),
+        status: "ANTIVIRUS_WAF_AND_E2E_CRYPTO_ACTIVE".to_string(),
+        transport_cipher: "AEGIS-SHA256-CTR-HMAC-V1".to_string(),
         max_body_bytes: MAX_BODY_BYTES,
         max_json_depth: MAX_JSON_DEPTH,
         max_batch_items: MAX_ARRAY_LEN,
         rate_limit_per_min: DEFAULT_RATE_LIMIT_PER_MIN,
         total_blocked_requests: state.blocked_requests_count.load(Ordering::Relaxed),
         total_sanitized_payloads: state.sanitized_payloads_count.load(Ordering::Relaxed),
+        total_decrypted_payloads: state.decrypted_payloads_count.load(Ordering::Relaxed),
         recent_blocked: blocked,
     })
 }

@@ -34,6 +34,7 @@ pub struct AppState {
     pub blocked_threats: Arc<RwLock<Vec<BlockedThreatRecord>>>,
     pub blocked_requests_count: Arc<AtomicU64>,
     pub sanitized_payloads_count: Arc<AtomicU64>,
+    pub decrypted_payloads_count: Arc<AtomicU64>,
     pub ws_broadcaster: broadcast::Sender<String>,
 }
 
@@ -69,6 +70,7 @@ impl AppState {
             blocked_threats: Arc::new(RwLock::new(Vec::new())),
             blocked_requests_count: Arc::new(AtomicU64::new(0)),
             sanitized_payloads_count: Arc::new(AtomicU64::new(0)),
+            decrypted_payloads_count: Arc::new(AtomicU64::new(0)),
             ws_broadcaster: tx,
         }
     }

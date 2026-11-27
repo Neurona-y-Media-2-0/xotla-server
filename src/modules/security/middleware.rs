@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use crate::{
     modules::security::{
         antivirus::{check_content_type, check_raw_binary_bytes},
+        crypto::{decrypt_envelope_to_json, EncryptedEnvelope, DEFAULT_SHARED_KEY},
         inspector::{
             inspect_json_value, inspect_raw_text, sanitize_json_value, MAX_BODY_BYTES,
         },
@@ -25,7 +26,7 @@ fn build_block_response(status: StatusCode, category: &str, reason: &str) -> Res
         status,
         Json(json!({
             "status": "BLOCKED",
-            "shield": "XOTLA_ANTIVIRUS_AND_WAF",
+            "shield": "XOTLA_ANTIVIRUS_WAF_CRYPTO",
             "category": category,
             "error": reason
         })),
@@ -51,7 +52,7 @@ fn attach_security_headers(headers: &mut HeaderMap) {
     );
     headers.insert(
         "x-xotla-shield",
-        HeaderValue::from_static("ANTIVIRUS_WAF_ACTIVE"),
+        HeaderValue::from_static("ANTIVIRUS_WAF_E2E_CRYPTO_ACTIVE"),
     );
 }
 
@@ -76,6 +77,15 @@ fn inspect_headers(headers: &HeaderMap) -> Result<(), (&'static str, &'static st
     Ok(())
 }
 
+fn resolve_shared_key(headers: &HeaderMap) -> String {
+    headers
+        .get("x-api-key")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_SHARED_KEY.to_string())
+}
+
 pub async fn security_shield_middleware(
     State(state): State<AppState>,
     req: Request,
@@ -85,6 +95,7 @@ pub async fn security_shield_middleware(
     let query = req.uri().query().unwrap_or("").to_string();
     let method = req.method().clone();
     let client_key = extract_client_key(req.headers());
+    let shared_key = resolve_shared_key(req.headers());
 
     if !check_rate_limit(&state, &client_key, &path) {
         record_blocked_threat(
@@ -143,6 +154,39 @@ pub async fn security_shield_middleware(
             if !is_dedicated_scan {
                 let is_sandbox = path.contains("sandbox") || path.contains("telemetry");
                 if let Ok(mut json_val) = serde_json::from_slice::<Value>(&bytes) {
+                    if json_val.get("aegis_enc").and_then(|v| v.as_str()) == Some("v1") {
+                        match serde_json::from_value::<EncryptedEnvelope>(json_val) {
+                            Ok(env) => match decrypt_envelope_to_json(&env, &shared_key) {
+                                Ok(decrypted) => {
+                                    state
+                                        .decrypted_payloads_count
+                                        .fetch_add(1, Ordering::Relaxed);
+                                    json_val = decrypted;
+                                }
+                                Err((cat, reason)) => {
+                                    record_blocked_threat(&state, &client_key, &path, cat, reason)
+                                        .await;
+                                    return build_block_response(StatusCode::FORBIDDEN, cat, reason);
+                                }
+                            },
+                            Err(_) => {
+                                record_blocked_threat(
+                                    &state,
+                                    &client_key,
+                                    &path,
+                                    "MALFORMED_ENCRYPTED_ENVELOPE",
+                                    "Invalid encrypted envelope format",
+                                )
+                                .await;
+                                return build_block_response(
+                                    StatusCode::BAD_REQUEST,
+                                    "MALFORMED_ENCRYPTED_ENVELOPE",
+                                    "Sobre cifrado invalido",
+                                );
+                            }
+                        }
+                    }
+
                     if let Err((cat, reason)) = inspect_json_value(&json_val, 0, is_sandbox) {
                         record_blocked_threat(&state, &client_key, &path, cat, reason).await;
                         return build_block_response(StatusCode::FORBIDDEN, cat, reason);

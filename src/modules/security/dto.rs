@@ -15,11 +15,13 @@ pub struct BlockedThreatRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityShieldStats {
     pub status: String,
+    pub transport_cipher: String,
     pub max_body_bytes: usize,
     pub max_json_depth: usize,
     pub max_batch_items: usize,
     pub rate_limit_per_min: u32,
     pub total_blocked_requests: u64,
     pub total_sanitized_payloads: u64,
+    pub total_decrypted_payloads: u64,
     pub recent_blocked: Vec<BlockedThreatRecord>,
 }
