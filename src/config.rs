@@ -7,6 +7,7 @@ pub struct AppConfig {
     pub public_ws_base: String,
     pub admin_user: String,
     pub admin_password: String,
+    pub db_path: String,
 }
 
 impl AppConfig {
@@ -21,6 +22,8 @@ impl AppConfig {
         let admin_user = env::var("AEGIS_ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
         let admin_password =
             env::var("AEGIS_ADMIN_PASSWORD").unwrap_or_else(|_| "aegisqro2026".to_string());
+        let db_path = env::var("AEGIS_DB_PATH")
+            .unwrap_or_else(|_| "aegisqro_devices.sqlite".to_string());
 
         Self {
             host,
@@ -28,6 +31,7 @@ impl AppConfig {
             public_ws_base,
             admin_user,
             admin_password,
+            db_path,
         }
     }
 }

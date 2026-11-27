@@ -1,6 +1,7 @@
 use axum::{extract::State, http::HeaderMap, Json};
 use serde_json::{json, Value};
 use crate::{
+    db::{purge_ephemeral_artifact, sha256_hex},
     modules::{
         devices::dto::AgentKind,
         telemetry::{
@@ -123,21 +124,51 @@ pub async fn android_sandbox_handler(
         AgentKind::AndroidAgent,
     );
 
-    let anomaly = format!(
-        "Descarga de APK ({}) con permisos de alto riesgo: {}",
-        payload.apk_info.package_name,
-        payload.apk_info.requested_permissions.join(", ")
-    );
+    let filename = payload.apk_info.package_name.clone();
+    let is_image = filename.ends_with(".png")
+        || filename.ends_with(".jpg")
+        || filename.ends_with(".jpeg")
+        || filename.ends_with(".webp")
+        || filename.ends_with(".gif");
 
-    let raw = serde_json::to_value(&payload).unwrap_or(Value::Null);
+    let artifact_sha256 = if payload.apk_info.sha256.len() == 64 {
+        payload.apk_info.sha256.clone()
+    } else {
+        sha256_hex(&payload.apk_info.sha256)
+    };
+
+    let purged = purge_ephemeral_artifact(&filename);
+
+    let anomaly = if payload.threat_score >= 0.45 {
+        Some(format!(
+            "Archivo/APK ({}) analizado con SHA-256 [{}]: permisos {}",
+            filename,
+            &artifact_sha256[..12],
+            payload.apk_info.requested_permissions.join(", ")
+        ))
+    } else {
+        None
+    };
+
+    let sanitized_meta = json!({
+        "artifact_name": filename,
+        "artifact_type": if is_image { "EPHEMERAL_IMAGE" } else { "ANDROID_ARTIFACT" },
+        "sha256": artifact_sha256,
+        "requested_permissions": payload.apk_info.requested_permissions,
+        "suspicious_urls_in_dex": payload.apk_info.suspicious_urls_in_dex,
+        "verdict": payload.verdict,
+        "threat_score": payload.threat_score,
+        "ephemeral_file_purged": purged
+    });
+
     let (event, profile) = evaluate_and_record_event(
         &state,
         &device,
         "ANDROID_SANDBOX",
         &payload.verdict,
         payload.threat_score,
-        Some(anomaly),
-        raw,
+        anomaly,
+        sanitized_meta,
     )
     .await;
 
@@ -146,6 +177,8 @@ pub async fn android_sandbox_handler(
         "sandbox_ingested": true,
         "device_id": device.device_id,
         "event_id": event.event_id,
+        "sha256": artifact_sha256,
+        "ephemeral_file_purged": purged,
         "current_risk_score": profile.current_risk_score,
         "risk_level": profile.risk_level,
         "ueba_profile": profile

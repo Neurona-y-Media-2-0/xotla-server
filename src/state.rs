@@ -3,6 +3,7 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, RwLock};
 use crate::{
     config::AppConfig,
+    db::Database,
     modules::{
         devices::dto::RegisteredDevice,
         policy::dto::{ExtensionPolicy, PolicyAuditEntry},
@@ -14,6 +15,7 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
+    pub db: Arc<Database>,
     pub devices_by_hw: Arc<DashMap<String, RegisteredDevice>>,
     pub devices_by_id: Arc<DashMap<String, String>>,
     pub token_to_hw: Arc<DashMap<String, String>>,
@@ -29,11 +31,23 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let (tx, _) = broadcast::channel(1024);
+        let db = Arc::new(Database::new(&config.db_path));
+        let devices_by_hw = Arc::new(DashMap::new());
+        let devices_by_id = Arc::new(DashMap::new());
+        let token_to_hw = Arc::new(DashMap::new());
+
+        for dev in db.load_all_devices() {
+            devices_by_id.insert(dev.device_id.clone(), dev.hardware_id.clone());
+            token_to_hw.insert(dev.session_token.clone(), dev.hardware_id.clone());
+            devices_by_hw.insert(dev.hardware_id.clone(), dev);
+        }
+
         Self {
             config,
-            devices_by_hw: Arc::new(DashMap::new()),
-            devices_by_id: Arc::new(DashMap::new()),
-            token_to_hw: Arc::new(DashMap::new()),
+            db,
+            devices_by_hw,
+            devices_by_id,
+            token_to_hw,
             active_ws_sessions: Arc::new(DashMap::new()),
             profiles: Arc::new(DashMap::new()),
             events: Arc::new(RwLock::new(Vec::new())),
