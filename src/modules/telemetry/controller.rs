@@ -1,9 +1,11 @@
 use axum::{extract::State, http::HeaderMap, Json};
+use chrono::Utc;
 use serde_json::{json, Value};
 use crate::{
     db::{purge_ephemeral_artifact, sha256_hex},
     modules::{
         devices::dto::AgentKind,
+        scanner::{dto::ScannedArtifactRecord, service::classify_file_extension},
         telemetry::{
             dto::{
                 AndroidSandboxPayload, BrowserTelemetryPayload, StoredTelemetryEvent,
@@ -52,6 +54,20 @@ pub async fn browser_telemetry_handler(
         obj.insert("url_sha256".to_string(), json!(url_sha256));
         obj.insert("ephemeral_file_purged".to_string(), json!(is_web_image));
     }
+
+    state.db.upsert_scanned_artifact(&ScannedArtifactRecord {
+        artifact_sha256: url_sha256.clone(),
+        file_type: classify_file_extension(&payload.details.original_url),
+        detected_magic: payload.details.detected_script.clone(),
+        verdict: payload.details.action_taken.clone(),
+        threat_score: payload.details.similarity_score,
+        detection_method: format!("WASM_BROWSER_{}", payload.event_type),
+        detection_reasons: vec![anomaly.clone()],
+        device_id: device.device_id.clone(),
+        employee_id: device.employee_id.clone(),
+        ephemeral_purged: true,
+        scanned_at: Utc::now(),
+    });
 
     let (event, profile) = evaluate_and_record_event(
         &state,
@@ -108,6 +124,28 @@ pub async fn windows_sandbox_handler(
     };
 
     let raw = serde_json::to_value(&payload).unwrap_or(Value::Null);
+    let win_sha = if payload.file_info.sha256.len() == 64 {
+        payload.file_info.sha256.clone()
+    } else {
+        sha256_hex(&payload.file_info.sha256)
+    };
+    state.db.upsert_scanned_artifact(&ScannedArtifactRecord {
+        artifact_sha256: win_sha,
+        file_type: classify_file_extension(&payload.file_info.filename),
+        detected_magic: "PE_WINDOWS_EXE".to_string(),
+        verdict: payload.verdict.clone(),
+        threat_score: payload.threat_score,
+        detection_method: if spawned_ps {
+            "WINDOWS_SANDBOX_POWERSHELL_SPAWN".to_string()
+        } else {
+            "WINDOWS_SANDBOX_BEHAVIORAL".to_string()
+        },
+        detection_reasons: vec![anomaly.clone()],
+        device_id: device.device_id.clone(),
+        employee_id: device.employee_id.clone(),
+        ephemeral_purged: true,
+        scanned_at: Utc::now(),
+    });
     let (event, profile) = evaluate_and_record_event(
         &state,
         &device,
@@ -180,6 +218,45 @@ pub async fn android_sandbox_handler(
         "ephemeral_file_purged": purged
     });
 
+    let mut android_reasons = Vec::new();
+    if !payload.apk_info.requested_permissions.is_empty() {
+        android_reasons.push(format!(
+            "Permisos peligrosos: {}",
+            payload.apk_info.requested_permissions.join(", ")
+        ));
+    }
+    if !payload.apk_info.suspicious_urls_in_dex.is_empty() {
+        android_reasons.push(format!(
+            "Dominios/IPs en DEX: {}",
+            payload.apk_info.suspicious_urls_in_dex.join(", ")
+        ));
+    }
+    if android_reasons.is_empty() {
+        android_reasons.push(format!("Inspeccion estatica/CDR con veredicto {}", payload.verdict));
+    }
+
+    state.db.upsert_scanned_artifact(&ScannedArtifactRecord {
+        artifact_sha256: artifact_sha256.clone(),
+        file_type: classify_file_extension(&filename),
+        detected_magic: if is_image {
+            "EPHEMERAL_IMAGE_STREAM".to_string()
+        } else {
+            "ANDROID_APK_PACKAGE".to_string()
+        },
+        verdict: payload.verdict.clone(),
+        threat_score: payload.threat_score,
+        detection_method: if is_image {
+            "CDR_EPHEMERAL_IMAGE_SCAN".to_string()
+        } else {
+            "STATIC_DEX_AND_MANIFEST_ANALYSIS".to_string()
+        },
+        detection_reasons: android_reasons,
+        device_id: device.device_id.clone(),
+        employee_id: device.employee_id.clone(),
+        ephemeral_purged: purged,
+        scanned_at: Utc::now(),
+    });
+
     let (event, profile) = evaluate_and_record_event(
         &state,
         &device,
@@ -224,6 +301,42 @@ pub async fn telemetry_batch_handler(
             "[{}] Veredicto {} (score {:.2})",
             evt.category, evt.local_verdict, evt.local_risk_score
         );
+        let batch_sha = if evt.artifact_sha256.len() == 64 {
+            evt.artifact_sha256.clone()
+        } else {
+            sha256_hex(&evt.artifact_sha256)
+        };
+        let fname = evt
+            .details
+            .get("filename")
+            .or_else(|| evt.details.get("package_name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(&evt.category);
+        let violations: Vec<String> = evt
+            .details
+            .get("violations")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_else(|| vec![anomaly.clone()]);
+
+        state.db.upsert_scanned_artifact(&ScannedArtifactRecord {
+            artifact_sha256: batch_sha,
+            file_type: classify_file_extension(fname),
+            detected_magic: evt.category.clone(),
+            verdict: evt.local_verdict.clone(),
+            threat_score: evt.local_risk_score,
+            detection_method: format!("OFFLINE_SANDBOX_{}", evt.category),
+            detection_reasons: violations,
+            device_id: device.device_id.clone(),
+            employee_id: device.employee_id.clone(),
+            ephemeral_purged: true,
+            scanned_at: Utc::now(),
+        });
+
         let raw = serde_json::to_value(&evt).unwrap_or(Value::Null);
         evaluate_and_record_event(
             &state,

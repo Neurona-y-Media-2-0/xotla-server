@@ -1,13 +1,17 @@
 // src/modules/security/controller.rs
 use std::sync::atomic::Ordering;
 use axum::{extract::State, http::HeaderMap, Json};
+use chrono::Utc;
 use crate::{
-    modules::security::{
-        antivirus::{scan_payload_request, AntivirusScanRequest, AntivirusScanResult},
-        dto::SecurityShieldStats,
-        inspector::{MAX_ARRAY_LEN, MAX_BODY_BYTES, MAX_JSON_DEPTH},
-        rate_limit::{
-             extract_client_key, record_blocked_threat, DEFAULT_RATE_LIMIT_PER_MIN,
+    modules::{
+        scanner::{dto::ScannedArtifactRecord, service::classify_file_extension},
+        security::{
+            antivirus::{scan_payload_request, AntivirusScanRequest, AntivirusScanResult},
+            dto::SecurityShieldStats,
+            inspector::{MAX_ARRAY_LEN, MAX_BODY_BYTES, MAX_JSON_DEPTH},
+            rate_limit::{
+                extract_client_key, record_blocked_threat, DEFAULT_RATE_LIMIT_PER_MIN,
+            },
         },
     },
     state::AppState,
@@ -35,6 +39,32 @@ pub async fn antivirus_scan_handler(
     Json(req): Json<AntivirusScanRequest>,
 ) -> Json<AntivirusScanResult> {
     let result = scan_payload_request(&req);
+    let fname = req.filename.as_deref().unwrap_or("memory_buffer.bin");
+
+    state.db.upsert_scanned_artifact(&ScannedArtifactRecord {
+        artifact_sha256: result.computed_sha256.clone(),
+        file_type: classify_file_extension(fname),
+        detected_magic: result
+            .signature_matched
+            .clone()
+            .unwrap_or_else(|| "CLEAN_STREAM".to_string()),
+        verdict: if result.clean {
+            "CLEAN".to_string()
+        } else {
+            "MALICIOUS".to_string()
+        },
+        threat_score: if result.clean { 0.05 } else { 0.98 },
+        detection_method: result
+            .signature_matched
+            .clone()
+            .unwrap_or_else(|| "ANTIVIRUS_MEMORY_SCAN".to_string()),
+        detection_reasons: vec![result.details.clone()],
+        device_id: "dev_qro_antivirus".to_string(),
+        employee_id: "emp_042".to_string(),
+        ephemeral_purged: true,
+        scanned_at: Utc::now(),
+    });
+
     if !result.clean {
         let client_key = extract_client_key(&headers);
         let sig = result

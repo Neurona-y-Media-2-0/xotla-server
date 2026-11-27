@@ -5,6 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use crate::modules::{
     devices::dto::{AgentKind, RegisteredDevice},
+    scanner::dto::ScannedArtifactRecord,
     telemetry::dto::StoredTelemetryEvent,
 };
 
@@ -62,6 +63,20 @@ impl Database {
                 raw_payload TEXT NOT NULL,
                 received_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS scanned_artifacts (
+                artifact_sha256 TEXT PRIMARY KEY,
+                file_type TEXT NOT NULL,
+                detected_magic TEXT NOT NULL,
+                verdict TEXT NOT NULL,
+                threat_score REAL NOT NULL,
+                detection_method TEXT NOT NULL,
+                detection_reasons TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                employee_id TEXT NOT NULL,
+                ephemeral_purged INTEGER NOT NULL DEFAULT 1,
+                scanned_at TEXT NOT NULL
+            );
             ",
         )
         .expect("Failed to initialize SQLite schema");
@@ -107,6 +122,85 @@ impl Database {
                 dev.last_seen.to_rfc3339(),
             ],
         );
+    }
+
+    pub fn upsert_scanned_artifact(&self, rec: &ScannedArtifactRecord) {
+        let conn = self.connect();
+        let reasons_json =
+            serde_json::to_string(&rec.detection_reasons).unwrap_or_else(|_| "[]".to_string());
+
+        let _ = conn.execute(
+            "
+            INSERT INTO scanned_artifacts (
+                artifact_sha256, file_type, detected_magic, verdict, threat_score,
+                detection_method, detection_reasons, device_id, employee_id,
+                ephemeral_purged, scanned_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(artifact_sha256) DO UPDATE SET
+                verdict = excluded.verdict,
+                threat_score = excluded.threat_score,
+                detection_method = excluded.detection_method,
+                detection_reasons = excluded.detection_reasons,
+                scanned_at = excluded.scanned_at
+            ",
+            params![
+                rec.artifact_sha256,
+                rec.file_type,
+                rec.detected_magic,
+                rec.verdict,
+                rec.threat_score,
+                rec.detection_method,
+                reasons_json,
+                rec.device_id,
+                rec.employee_id,
+                if rec.ephemeral_purged { 1 } else { 0 },
+                rec.scanned_at.to_rfc3339(),
+            ],
+        );
+    }
+
+    pub fn load_scanned_artifacts(&self) -> Vec<ScannedArtifactRecord> {
+        let conn = self.connect();
+        let mut stmt = match conn.prepare(
+            "SELECT artifact_sha256, file_type, detected_magic, verdict, threat_score,
+                    detection_method, detection_reasons, device_id, employee_id,
+                    ephemeral_purged, scanned_at
+             FROM scanned_artifacts
+             ORDER BY scanned_at DESC
+             LIMIT 500",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        let iter = stmt.query_map([], |row| {
+            let reasons_str: String = row.get(6)?;
+            let scanned_str: String = row.get(10)?;
+            let reasons: Vec<String> = serde_json::from_str(&reasons_str).unwrap_or_default();
+            let scanned_at = DateTime::parse_from_rfc3339(&scanned_str)
+                .map(|d| d.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+            let purged_int: i32 = row.get(9)?;
+
+            Ok(ScannedArtifactRecord {
+                artifact_sha256: row.get(0)?,
+                file_type: row.get(1)?,
+                detected_magic: row.get(2)?,
+                verdict: row.get(3)?,
+                threat_score: row.get(4)?,
+                detection_method: row.get(5)?,
+                detection_reasons: reasons,
+                device_id: row.get(7)?,
+                employee_id: row.get(8)?,
+                ephemeral_purged: purged_int != 0,
+                scanned_at,
+            })
+        });
+
+        match iter {
+            Ok(rows) => rows.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        }
     }
 
     pub fn insert_telemetry_event(&self, evt: &StoredTelemetryEvent, dedup_fingerprint: &str) -> bool {

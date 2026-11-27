@@ -23,6 +23,7 @@ use crate::{
             demo_phishing_page_handler, get_admin_policy_handler, get_public_policy_handler,
             put_admin_policy_handler,
         },
+        scanner::controller::{list_scanned_artifacts_handler, scan_file_handler},
         security::{
             controller::{antivirus_scan_handler, security_status_handler},
             inspector::MAX_BODY_BYTES,
@@ -60,6 +61,8 @@ async fn root_info_handler(State(state): State<AppState>) -> Json<Value> {
             "admin_logout": "POST /admin/logout",
             "admin_policy": "GET/PUT /admin/policy",
             "demo_phishing": "GET /demo-phishing",
+            "scanner_inspect": "POST /v1/scanner/inspect",
+            "scanned_artifacts": "GET /v1/scanner/artifacts",
             "ueba_profile": "GET /v1/ueba/profile/{employee_id}",
             "events": "GET /v1/events"
         }
@@ -111,6 +114,8 @@ async fn main() {
         )
         .route("/demo-phishing", get(demo_phishing_page_handler))
         .route("/factura_noviembre.exe", get(demo_malicious_exe_handler))
+        .route("/v1/scanner/inspect", post(scan_file_handler))
+        .route("/v1/scanner/artifacts", get(list_scanned_artifacts_handler))
         .route("/v1/ueba/profile/:employee_id", get(get_profile_handler))
         .route("/ueba/profile/:employee_id", get(get_profile_handler))
         .route("/v1/events", get(list_events_handler))
