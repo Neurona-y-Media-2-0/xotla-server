@@ -162,6 +162,14 @@
       </div>
     </div>
 
+    <h2>0. Perfil de Conducta UEBA en Tiempo Real (emp_042 — Contabilidad)</h2>
+    <div class="table-wrap" style="padding: 18px 20px; margin-bottom: 18px;">
+      <div id="uebaSummaryText" style="font-size: 14px; color: #f0f6fc; margin-bottom: 14px; line-height: 1.6;"></div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px;" id="uebaFeaturesGrid"></div>
+      <div style="font-size: 12px; color: #8b949e; text-transform: uppercase; margin-bottom: 6px;">Anomalias Conductuales Correlacionadas:</div>
+      <ul id="uebaAnomaliesList" class="reason-list"></ul>
+    </div>
+
     <h2>1. Dispositivos Conectados (Tabla: devices)</h2>
     <div class="table-wrap">
       <table>
@@ -261,6 +269,25 @@
         document.getElementById("statRisk").textContent =
           Number(profile.current_risk_score || 0).toFixed(2) + " (" + profile.risk_level + ")";
         document.getElementById("statAction").textContent = profile.recommended_action;
+
+        document.getElementById("uebaSummaryText").innerHTML =
+          `<strong>Dictamen Conductual UEBA + Isolation Forest:</strong> ${profile.llm_behavioral_summary || ""}`;
+
+        const f = profile.features || {};
+        const b = profile.behavioral_breakdown || {};
+        document.getElementById("uebaFeaturesGrid").innerHTML = `
+          <div class="mono">Depto ID: <strong>${f.department_id ?? 1} (Contabilidad)</strong></div>
+          <div class="mono">Hora Actividad: <strong>${f.hour_of_day ?? 0}:00 hrs</strong></div>
+          <div class="mono">PowerShell Spawned: <strong>${f.powershell_spawned ? "SI (1)" : "NO (0)"}</strong></div>
+          <div class="mono">Intentos Homografos/Web: <strong>${f.homograph_attempts ?? 0}</strong></div>
+          <div class="mono">Max Sandbox Score: <strong>${Number(f.sandbox_threat_score || 0).toFixed(2)}</strong></div>
+          <div class="mono">Permisos APK Peligrosos: <strong>${f.apk_high_risk_perms ?? 0}</strong></div>
+          <div class="mono">Conexiones IP/C2 Externas: <strong>${f.external_ip_connections ?? 0}</strong></div>
+          <div class="mono">Desviacion Conductual: <strong>+${b.behavior_deviation_percent ?? 0}%</strong></div>
+        `;
+
+        document.getElementById("uebaAnomaliesList").innerHTML =
+          (profile.anomalies_detected || []).map(x => `<li>${x}</li>`).join("") || "<li>Sin anomalias</li>";
 
         document.getElementById("devicesBody").innerHTML = devices.map(d => `
           <tr>

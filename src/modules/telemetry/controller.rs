@@ -44,21 +44,15 @@ pub async fn browser_telemetry_handler(
             state.db.upsert_device(&copy);
         }
 
-        let current_profile = state
-            .profiles
-            .entry(device.employee_id.clone())
-            .or_insert_with(|| crate::modules::ueba::model::EmployeeRiskProfile {
-                employee_id: device.employee_id.clone(),
-                department: device.department.clone(),
-                baseline_risk: 0.12,
-                current_risk_score: 0.12,
-                risk_level: "LOW".to_string(),
-                anomalies_detected: Vec::new(),
-                recommended_action: "MONITOR".to_string(),
-                total_events: 0,
-                updated_at: Utc::now(),
-            })
-            .clone();
+        let events_snapshot = state.events.read().await.clone();
+        let artifacts_snapshot = state.db.load_scanned_artifacts();
+        let current_profile = crate::modules::ueba::engine::build_profile_from_stored_data(
+            &device.employee_id,
+            &device.department,
+            state.devices_by_hw.len(),
+            &events_snapshot,
+            &artifacts_snapshot,
+        );
 
         return Json(json!({
             "status": "ok",
