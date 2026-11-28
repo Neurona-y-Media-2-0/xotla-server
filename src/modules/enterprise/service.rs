@@ -15,6 +15,67 @@ pub fn get_enterprise_account(state: &AppState, company_id: &str) -> EnterpriseA
     state.db.load_enterprise_account(company_id)
 }
 
+pub fn create_enterprise_account_with_pool(
+    state: &AppState,
+    req: AllocateCompanyRequest,
+) -> (EnterpriseAccount, Option<String>, Vec<EnterpriseClientToken>) {
+    let cid = req
+        .company_id
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("comp_{}", &Uuid::new_v4().simple().to_string()[..8]));
+
+    state.db.upsert_enterprise_account(
+        &cid,
+        &req.company_name,
+        &req.master_account_email,
+        req.total_allocated_tokens,
+    );
+
+    let plain_pw = req
+        .temp_password
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| {
+            let short = &Uuid::new_v4().simple().to_string()[..8].to_uppercase();
+            format!("AEGIS-{}-{}", &short[..4], &short[4..8])
+        });
+
+    let hours = req.expires_in_hours.unwrap_or(72).clamp(1, 720) as i64;
+    let expires_at = (Utc::now() + Duration::hours(hours)).to_rfc3339();
+    let pw_hash = sha256_hex(&plain_pw);
+    state
+        .db
+        .set_enterprise_temp_password(&cid, &pw_hash, &expires_at);
+
+    let existing_tokens = state.db.load_enterprise_tokens(&cid);
+    let current_count = existing_tokens.len() as u32;
+    let needed = req.total_allocated_tokens.saturating_sub(current_count);
+    let now = Utc::now().to_rfc3339();
+
+    for idx in 0..needed {
+        let seed = format!("{}:slot_{}:{}", cid, current_count + idx + 1, Uuid::new_v4());
+        let tok_sha = sha256_hex(&seed);
+        let tok_id = format!("aegis_tok_{}", &tok_sha[..16]);
+        let tok = EnterpriseClientToken {
+            token_id: tok_id,
+            company_id: cid.clone(),
+            token_sha256: tok_sha,
+            assigned_device_id: None,
+            assigned_employee_id: None,
+            client_label: format!("Licencia #{}", current_count + idx + 1),
+            platform: "UNASSIGNED".to_string(),
+            status: "AVAILABLE".to_string(),
+            activated_at: now.clone(),
+            last_used_at: now.clone(),
+        };
+        state.db.insert_enterprise_token(&tok);
+    }
+
+    let acc = state.db.load_enterprise_account(&cid);
+    let all_tokens = state.db.load_enterprise_tokens(&cid);
+    (acc, Some(plain_pw), all_tokens)
+}
+
 pub fn update_company_quota(
     state: &AppState,
     req: AllocateCompanyRequest,

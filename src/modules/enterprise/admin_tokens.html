@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AegisQRO — Cuenta Empresarial, Grupos y Tokens</title>
+  <title>AegisQRO — Alta de Cuentas Empresariales y Pool de Tokens</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -30,17 +30,10 @@
       font-weight: 600;
       text-decoration: none;
       color: #8b949e;
-      border: 1px solid transparent;
     }
-    .nav-btn.active {
-      background: #1f6feb;
-      color: #fff;
-    }
-    .nav-btn:hover:not(.active) {
-      background: #192030;
-      color: #fff;
-    }
-    .container { max-width: 980px; margin: 28px auto; padding: 0 20px 60px; }
+    .nav-btn.active { background: #1f6feb; color: #fff; }
+    .nav-btn:hover:not(.active) { background: #192030; color: #fff; }
+    .container { max-width: 1020px; margin: 28px auto; padding: 0 20px 60px; }
     .card {
       background: #121722;
       border: 1px solid #21293a;
@@ -49,26 +42,11 @@
       margin-bottom: 20px;
       overflow-x: auto;
     }
-    td, th { overflow-wrap: anywhere; word-break: break-word; }
-    h2 { margin: 0 0 14px; font-size: 16px; color: #fff; }
-    .quota-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-    .q-box {
-      background: #0b0e14;
-      border: 1px solid #21293a;
-      border-radius: 10px;
-      padding: 14px 16px;
-      text-align: center;
-    }
-    .q-label { font-size: 12px; color: #8b949e; }
-    .q-val { font-size: 26px; font-weight: 800; margin-top: 4px; }
+    h2 { margin: 0 0 6px; font-size: 16.5px; color: #fff; }
+    .sub { font-size: 13px; color: #8b949e; margin-bottom: 16px; }
     .form-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
       gap: 12px;
       align-items: end;
     }
@@ -89,20 +67,11 @@
       padding: 10px 18px;
       border-radius: 8px;
       font-size: 13.5px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       width: 100%;
     }
     .btn:hover { background: #388bfd; }
-    .btn-revoke {
-      background: #f8514922;
-      color: #ff7b72;
-      border: 1px solid #f8514966;
-      padding: 5px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      cursor: pointer;
-    }
     table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: left; }
     th {
       color: #8b949e;
@@ -111,17 +80,26 @@
       padding: 10px 12px;
       border-bottom: 1px solid #21293a;
     }
-    td { padding: 12px; border-bottom: 1px solid #192030; }
+    td { padding: 12px; border-bottom: 1px solid #192030; overflow-wrap: anywhere; }
     .mono {
       font-family: monospace;
       font-size: 12px;
       color: #79c0ff;
       background: #0b0e14;
-      padding: 3px 7px;
+      padding: 4px 8px;
       border-radius: 6px;
       border: 1px solid #21293a;
     }
-    .badge-ok {
+    .badge-avail {
+      background: #1f6feb22;
+      color: #58a6ff;
+      border: 1px solid #388bfd66;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-active {
       background: #2ea04322;
       color: #3fb950;
       border: 1px solid #2ea04366;
@@ -130,253 +108,163 @@
       font-size: 11px;
       font-weight: 700;
     }
-    .badge-off {
-      background: #f8514922;
-      color: #ff7b72;
-      border: 1px solid #f8514966;
-      padding: 3px 9px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
+    .result-box {
+      display: none;
+      margin-top: 16px;
+      background: #0b0e14;
+      border: 1px solid #2ea04366;
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 13.5px;
     }
-    .msg { font-size: 13px; margin-top: 10px; color: #3fb950; }
   </style>
 </head>
 <body>
   <nav class="navbar">
-    <div class="brand">AEGISQRO · ADMINISTRACION</div>
+    <div class="brand">AEGISQRO · CREACION DE CUENTAS</div>
     <div class="nav-links">
-      <a href="/dashboard" class="nav-btn active">1. Cuenta, Grupos y Tokens</a>
+      <a href="/dashboard" class="nav-btn active">1. Crear Cuenta y Tokens</a>
       <a href="/db" class="nav-btn">2. Ver Datos que Llegan</a>
     </div>
   </nav>
 
   <main class="container">
-    <!-- 1. Cuenta Unica de la Empresa -->
+    <!-- 1. Crear Cuenta de Empresa con Contrasena Temporal y Pool de Tokens -->
     <section class="card">
-      <h2>1. Cuenta Maestra de la Empresa</h2>
-      <div class="quota-row">
-        <div class="q-box">
-          <div class="q-label">Tokens Totales de la Empresa</div>
-          <div id="qTotal" class="q-val">10</div>
-        </div>
-        <div class="q-box">
-          <div class="q-label">Tokens Activos en Uso</div>
-          <div id="qUsed" class="q-val" style="color:#3fb950;">2</div>
-        </div>
-        <div class="q-box">
-          <div class="q-label">Tokens Disponibles</div>
-          <div id="qAvail" class="q-val" style="color:#58a6ff;">8</div>
-        </div>
-      </div>
+      <h2>Crear Cuenta de Empresa</h2>
+      <div class="sub">Crea la cuenta unica de la empresa, su contrasena temporal (cifrada SHA-256 en BD) y genera su lote de tokens listos para usarse.</div>
 
       <div class="form-grid">
         <div>
           <label>Nombre de la Empresa</label>
-          <input type="text" id="compName" placeholder="Ej. Corporativo QRO" />
+          <input type="text" id="inpName" placeholder="Ej. Corporativo QRO" />
         </div>
         <div>
-          <label>Correo de la Cuenta Unica</label>
-          <input type="email" id="compEmail" placeholder="admin@empresa.mx" />
+          <label>Correo de la Cuenta</label>
+          <input type="email" id="inpEmail" placeholder="ej. bloque@empresa.com" />
         </div>
         <div>
-          <label>Cantidad de Tokens Asignados</label>
-          <input type="number" id="compTokens" min="1" max="500" />
+          <label>Cantidad de Tokens</label>
+          <input type="number" id="inpCount" value="10" min="1" max="200" />
         </div>
         <div>
-          <button class="btn" onclick="saveCompany()">Guardar Cuenta</button>
+          <label>Contrasena Temporal (vacio = autogenerar)</label>
+          <input type="text" id="inpTempPw" placeholder="Ej. bloque12345" />
+        </div>
+        <div>
+          <button class="btn" onclick="createAccount()">Crear Cuenta con Tokens</button>
         </div>
       </div>
 
-      <hr style="border:none; border-top:1px solid #21293a; margin:18px 0;" />
-
-      <div class="form-grid">
-        <div>
-          <label>Contrasena Temporal (opcional, vacio = autogenerar)</label>
-          <input type="text" id="tempPwInput" placeholder="Ej. AEGIS-8492 o dejar vacio" />
-        </div>
-        <div>
-          <label>Vigencia de la Contrasena Temporal</label>
-          <select id="tempPwHours">
-            <option value="1">1 Hora</option>
-            <option value="8">8 Horas (Turno)</option>
-            <option value="24" selected>24 Horas</option>
-            <option value="72">72 Horas (Hackathon)</option>
-          </select>
-        </div>
-        <div>
-          <button class="btn" style="background:#2ea043;" onclick="createTempPassword()">Crear Contrasena Temporal</button>
-        </div>
-      </div>
-      <div id="tempPwBox" style="display:none; margin-top:12px; background:#0b0e14; border:1px solid #2ea04366; border-radius:8px; padding:12px 14px; font-size:13.5px;"></div>
-      <div id="msgCompany" class="msg"></div>
+      <div id="createdResult" class="result-box"></div>
     </section>
 
-    <!-- 2. Asignar Token a Grupo / Cliente -->
+    <!-- 2. Cuentas Empresariales Creadas en SQLite -->
     <section class="card">
-      <h2>2. Asignar Nuevo Token a Grupo / Dispositivo</h2>
-      <div class="form-grid">
-        <div>
-          <label>Grupo / Departamento</label>
-          <input type="text" id="tokGroup" placeholder="Ej. Contabilidad, TI, Ventas" value="Contabilidad" />
-        </div>
-        <div>
-          <label>Nombre del Cliente / Equipo</label>
-          <input type="text" id="tokLabel" placeholder="Ej. Celular Rafa / Laptop Berny" />
-        </div>
-        <div>
-          <label>Plataforma de la App</label>
-          <select id="tokPlatform">
-            <option value="android">Android App</option>
-            <option value="windows">Windows / Sandbox</option>
-            <option value="browser">Extension Web</option>
-          </select>
-        </div>
-        <div>
-          <button class="btn" onclick="createToken()">Generar y Activar Token</button>
-        </div>
-      </div>
-      <div id="msgToken" class="msg"></div>
-    </section>
-
-    <!-- 3. Lista de Tokens Activos por Grupo -->
-    <section class="card">
-      <h2>3. Tokens Activos Asignados</h2>
+      <h2>Cuentas Empresariales Registradas en Base de Datos</h2>
       <table>
         <thead>
           <tr>
-            <th>Grupo</th>
-            <th>Cliente / Dispositivo</th>
-            <th>Plataforma</th>
-            <th>Token para la App</th>
-            <th>Estado</th>
-            <th>Accion</th>
+            <th>ID Cuenta</th>
+            <th>Empresa</th>
+            <th>Correo</th>
+            <th>Tokens Totales</th>
+            <th>En Uso</th>
+            <th>Disponibles</th>
+            <th>Contrasena Temporal</th>
           </tr>
         </thead>
-        <tbody id="tokensList"></tbody>
+        <tbody id="accountsBody"></tbody>
+      </table>
+    </section>
+
+    <!-- 3. Pool de Tokens de las Cuentas (sin asignacion manual) -->
+    <section class="card">
+      <h2>Tokens Generados de la Cuenta (Pool en Base de Datos)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Cuenta Empresa</th>
+            <th>Token (SHA-256)</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tokensBody"></tbody>
       </table>
     </section>
   </main>
 
   <script>
-    async function loadEnterprise() {
+    async function loadData() {
       const res = await fetch("/v1/enterprise");
       const data = await res.json();
-      const acc = data.enterprise_account || {};
+      const accounts = data.accounts || [];
       const tokens = data.client_tokens || [];
 
-      document.getElementById("qTotal").textContent = acc.total_allocated_tokens ?? 10;
-      document.getElementById("qUsed").textContent = acc.active_tokens_used ?? 0;
-      document.getElementById("qAvail").textContent = acc.available_tokens ?? 0;
-
-      if (!document.getElementById("compName").dataset.loaded) {
-        document.getElementById("compName").value = acc.company_name || "";
-        document.getElementById("compEmail").value = acc.master_account_email || "";
-        document.getElementById("compTokens").value = acc.total_allocated_tokens ?? 10;
-        document.getElementById("compName").dataset.loaded = "1";
-      }
-
-      if (acc.has_temp_password && acc.temp_password_expires_at && !document.getElementById("tempPwBox").dataset.justCreated) {
-        const exp = new Date(acc.temp_password_expires_at).toLocaleString("es-MX");
-        const box = document.getElementById("tempPwBox");
-        box.style.display = "block";
-        box.innerHTML = `<span style="color:#3fb950; font-weight:700;">[OK] Contrasena temporal activa en BD (cifrada SHA-256)</span> · Expira: <strong>${exp}</strong>`;
-      }
-
-      document.getElementById("tokensList").innerHTML = tokens.map(t => `
+      document.getElementById("accountsBody").innerHTML = accounts.map(a => `
         <tr>
-          <td><strong>${t.assigned_employee_id || "General"}</strong></td>
-          <td>${t.client_label} <span style="color:#8b949e;font-size:12px;">(${t.assigned_device_id || "nuevo"})</span></td>
-          <td>${t.platform}</td>
-          <td><span class="mono">${t.token_id}</span></td>
-          <td><span class="${t.status === 'ACTIVE' ? 'badge-ok' : 'badge-off'}">${t.status}</span></td>
-          <td>
-            ${t.status === "ACTIVE"
-              ? `<button class="btn-revoke" onclick="revokeTok('${t.token_id}')">Desactivar</button>`
-              : `<span style="color:#8b949e;font-size:12px;">Inactivo</span>`}
-          </td>
+          <td><span class="mono">${a.company_id}</span></td>
+          <td><strong>${a.company_name}</strong></td>
+          <td>${a.master_account_email}</td>
+          <td><strong>${a.total_allocated_tokens}</strong></td>
+          <td style="color:#3fb950;"><strong>${a.active_tokens_used}</strong></td>
+          <td style="color:#58a6ff;"><strong>${a.available_tokens}</strong></td>
+          <td>${a.has_temp_password ? '<span class="badge-active">SHA-256 Guardada</span>' : '<span style="color:#8b949e;">Sin definir</span>'}</td>
         </tr>
-      `).join("") || '<tr><td colspan="6" style="color:#8b949e;">No hay tokens asignados</td></tr>';
+      `).join("") || '<tr><td colspan="7" style="color:#8b949e;">Sin cuentas</td></tr>';
+
+      document.getElementById("tokensBody").innerHTML = tokens.map(t => `
+        <tr>
+          <td><span class="mono">${t.company_id}</span></td>
+          <td><span class="mono">${t.token_id}</span></td>
+          <td><span class="${t.status === 'ACTIVE' ? 'badge-active' : 'badge-avail'}">${t.status}</span></td>
+        </tr>
+      `).join("") || '<tr><td colspan="3" style="color:#8b949e;">Sin tokens</td></tr>';
     }
 
-    async function createTempPassword() {
-      const custom = document.getElementById("tempPwInput").value.trim();
-      const hours = Number(document.getElementById("tempPwHours").value || 24);
-      const res = await fetch("/v1/enterprise/temp-password", {
+    async function createAccount() {
+      const name = document.getElementById("inpName").value.trim();
+      const email = document.getElementById("inpEmail").value.trim();
+      const count = Number(document.getElementById("inpCount").value || 10);
+      const pw = document.getElementById("inpTempPw").value.trim();
+
+      if (!name || !email) {
+        alert("Escribe el nombre y correo de la empresa");
+        return;
+      }
+
+      const res = await fetch("/v1/enterprise/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          custom_password: custom || null,
-          expires_in_hours: hours
+          company_name: name,
+          master_account_email: email,
+          total_allocated_tokens: count,
+          temp_password: pw || null,
+          expires_in_hours: 72
         })
       });
+
       const data = await res.json();
       if (res.ok) {
-        const exp = new Date(data.expires_at).toLocaleString("es-MX");
-        const box = document.getElementById("tempPwBox");
-        box.dataset.justCreated = "1";
+        const box = document.getElementById("createdResult");
         box.style.display = "block";
         box.innerHTML = `
-          <div><strong style="color:#3fb950;">[OK] Contrasena Temporal Creada (copiala ahora, en BD solo se guarda su SHA-256):</strong></div>
-          <div style="margin-top:6px;">Contrasena: <span class="mono" style="font-size:15px; font-weight:700; color:#fff;">${data.temp_password}</span> · Expira: <strong>${exp}</strong></div>
-          <div style="margin-top:4px; font-size:11.5px; color:#8b949e;">SHA-256 guardado en SQLite: ${data.password_sha256}</div>
+          <div style="color:#3fb950; font-weight:700;">[OK] Cuenta creada en SQLite con ${count} tokens generados</div>
+          <div style="margin-top:6px;">
+            Cuenta ID: <span class="mono">${data.enterprise_account.company_id}</span> ·
+            Correo: <strong>${data.enterprise_account.master_account_email}</strong> ·
+            Contrasena Temporal: <span class="mono" style="color:#fff;font-weight:700;">${data.temp_password}</span>
+          </div>
         `;
-        document.getElementById("tempPwInput").value = "";
+        document.getElementById("inpName").value = "";
+        document.getElementById("inpEmail").value = "";
+        document.getElementById("inpTempPw").value = "";
+        loadData();
       }
     }
 
-    async function saveCompany() {
-      const res = await fetch("/v1/enterprise/quota", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_name: document.getElementById("compName").value.trim(),
-          master_account_email: document.getElementById("compEmail").value.trim(),
-          total_allocated_tokens: Number(document.getElementById("compTokens").value || 10)
-        })
-      });
-      if (res.ok) {
-        document.getElementById("msgCompany").textContent = "[OK] Cuenta empresarial actualizada.";
-        loadEnterprise();
-      }
-    }
-
-    async function createToken() {
-      const group = document.getElementById("tokGroup").value.trim() || "General";
-      const label = document.getElementById("tokLabel").value.trim() || "Equipo Corporativo";
-      const platform = document.getElementById("tokPlatform").value;
-
-      const res = await fetch("/v1/enterprise/tokens/issue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employee_id: group,
-          client_label: label,
-          platform: platform
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        document.getElementById("msgToken").style.color = "#3fb950";
-        document.getElementById("msgToken").textContent = "[OK] Token creado: " + data.token.token_id;
-        document.getElementById("tokLabel").value = "";
-        loadEnterprise();
-      } else {
-        document.getElementById("msgToken").style.color = "#ff7b72";
-        document.getElementById("msgToken").textContent = "[ERROR] " + (data.error || "Sin cupo de tokens");
-      }
-    }
-
-    async function revokeTok(id) {
-      await fetch("/v1/enterprise/tokens/revoke", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token_id: id })
-      });
-      loadEnterprise();
-    }
-
-    loadEnterprise();
+    loadData();
   </script>
 </body>
 </html>

@@ -131,6 +131,23 @@ impl Database {
         );
     }
 
+    pub fn load_all_enterprise_accounts(&self) -> Vec<EnterpriseAccount> {
+        let conn = self.connect();
+        let mut stmt = match conn.prepare(
+            "SELECT company_id FROM enterprise_accounts ORDER BY created_at DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let ids: Vec<String> = match stmt.query_map([], |r| r.get(0)) {
+            Ok(rows) => rows.filter_map(Result::ok).collect(),
+            Err(_) => return Vec::new(),
+        };
+        ids.into_iter()
+            .map(|id| self.load_enterprise_account(&id))
+            .collect()
+    }
+
     pub fn load_enterprise_account(&self, company_id: &str) -> EnterpriseAccount {
         let conn = self.connect();
         let active_used: u32 = conn

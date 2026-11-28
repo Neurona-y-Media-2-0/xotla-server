@@ -12,8 +12,8 @@ use crate::{
             RevokeTokenRequest,
         },
         service::{
-            generate_temp_password, get_enterprise_account, issue_or_activate_client_token,
-            update_company_quota, DEFAULT_COMPANY_ID,
+            create_enterprise_account_with_pool, generate_temp_password, get_enterprise_account,
+            issue_or_activate_client_token, update_company_quota, DEFAULT_COMPANY_ID,
         },
     },
     state::AppState,
@@ -27,11 +27,29 @@ pub async fn get_enterprise_overview_handler(
     State(state): State<AppState>,
 ) -> Json<Value> {
     let account = get_enterprise_account(&state, DEFAULT_COMPANY_ID);
-    let tokens = state.db.load_enterprise_tokens(DEFAULT_COMPANY_ID);
+    let accounts = state.db.load_all_enterprise_accounts();
+    let mut all_tokens = Vec::new();
+    for a in &accounts {
+        all_tokens.extend(state.db.load_enterprise_tokens(&a.company_id));
+    }
 
     Json(json!({
         "enterprise_account": account,
-        "client_tokens": tokens
+        "accounts": accounts,
+        "client_tokens": all_tokens
+    }))
+}
+
+pub async fn create_enterprise_account_handler(
+    State(state): State<AppState>,
+    Json(req): Json<AllocateCompanyRequest>,
+) -> Json<Value> {
+    let (acc, plain_pw, tokens) = create_enterprise_account_with_pool(&state, req);
+    Json(json!({
+        "status": "ACCOUNT_CREATED_WITH_TOKENS",
+        "enterprise_account": acc,
+        "temp_password": plain_pw,
+        "generated_tokens": tokens
     }))
 }
 
