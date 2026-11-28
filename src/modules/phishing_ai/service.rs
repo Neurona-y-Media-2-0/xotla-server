@@ -73,6 +73,42 @@ async fn try_hf_inference_api(model_id: &str, text: &str, hf_token: Option<&str>
     resp.json::<Value>().await.ok()
 }
 
+#[derive(serde::Deserialize)]
+struct DedicatedLlmResponse {
+    verdict: String,
+    combined_threat_score: f32,
+    roberta_email_detector: ModelPrediction,
+    horizon_scam_detector: ModelPrediction,
+    triggered_indicators: Vec<String>,
+}
+
+async fn try_dedicated_llm_node(req: &PhishingAnalyzeRequest) -> Option<DedicatedLlmResponse> {
+    let llm_url = std::env::var("AEGIS_LLM_NODE_URL")
+        .unwrap_or_else(|_| "http://172.31.21.83:8000/analyze".to_string());
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(12))
+        .build()
+        .ok()?;
+
+    let resp = client
+        .post(&llm_url)
+        .json(&json!({
+            "text": req.text,
+            "subject": req.subject.as_deref().unwrap_or(""),
+            "sender": req.sender.as_deref().unwrap_or(""),
+            "url": req.url.as_deref().unwrap_or("")
+        }))
+        .send()
+        .await
+        .ok()?;
+
+    if !resp.status().is_success() {
+        return None;
+    }
+
+    resp.json::<DedicatedLlmResponse>().await.ok()
+}
+
 pub async fn analyze_phishing_text(
     state: &AppState,
     req: PhishingAnalyzeRequest,
@@ -88,6 +124,50 @@ pub async fn analyze_phishing_text(
     .to_string();
 
     let content_sha256 = sha256_hex(&combined_text);
+    let device_id = req.device_id.clone().unwrap_or_else(|| "dev_qro_llm_ai".to_string());
+    let employee_id = req.employee_id.clone().unwrap_or_else(|| "emp_042".to_string());
+
+    if let Some(real_ai) = try_dedicated_llm_node(&req).await {
+        let mut db_reasons = vec![
+            format!(
+                "[RoBERTa PyTorch Real] {} ({:.2}%)",
+                real_ai.roberta_email_detector.label,
+                real_ai.roberta_email_detector.confidence * 100.0
+            ),
+            format!(
+                "[Horizon-Labs mmBERT ONNX Real] {} ({:.2}%)",
+                real_ai.horizon_scam_detector.label,
+                real_ai.horizon_scam_detector.confidence * 100.0
+            ),
+        ];
+        db_reasons.extend(real_ai.triggered_indicators.clone());
+
+        state.db.upsert_scanned_artifact(&ScannedArtifactRecord {
+            artifact_sha256: content_sha256.clone(),
+            file_type: "LLM_ANALYZED_CONTENT".to_string(),
+            detected_magic: "PYTORCH_ONNX_OLLAMA_LLM".to_string(),
+            verdict: real_ai.verdict.clone(),
+            threat_score: real_ai.combined_threat_score,
+            detection_method: "EC2_LLM_NODE (RoBERTa + Horizon-Labs + Qwen2.5 LLM)".to_string(),
+            detection_reasons: db_reasons,
+            device_id: device_id.clone(),
+            employee_id: employee_id.clone(),
+            ephemeral_purged: true,
+            scanned_at: Utc::now(),
+        });
+
+        return PhishingAnalysisResult {
+            content_sha256,
+            verdict: real_ai.verdict,
+            combined_threat_score: real_ai.combined_threat_score,
+            roberta_email_detector: real_ai.roberta_email_detector,
+            horizon_scam_detector: real_ai.horizon_scam_detector,
+            triggered_indicators: real_ai.triggered_indicators,
+            device_id,
+            employee_id,
+            analyzed_at: Utc::now(),
+        };
+    }
     let lower = combined_text.to_lowercase();
 
     let mut indicators = Vec::new();
