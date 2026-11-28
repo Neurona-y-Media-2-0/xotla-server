@@ -171,7 +171,7 @@
         const llm = r.match(/^\[LLM[^\]]*\]\s*(.*)$/i);
         if (llm) {
           const t = llm[1].trim();
-          if (t.length >= 40 && !/aqu[ií] tienes|mensaje en espa|respectivamente/i.test(t)) {
+          if (t.length >= 40 && !/^["'\u201c\u2018]/.test(t) && !/aqu[ií] tienes|mensaje en espa|respectivamente/i.test(t)) {
             add("IA: " + (t.length > 170 ? t.slice(0, 170) + "..." : t));
           }
           return;
