@@ -30,6 +30,9 @@ pub struct EnterpriseClientToken {
     pub status: String,
     pub activated_at: String,
     pub last_used_at: String,
+    /// Identificador unico de hardware del dispositivo vinculado (ej. MAC / hardware_id).
+    #[serde(default)]
+    pub hardware_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,6 +73,12 @@ pub struct BindTokenRequest {
     pub employee_id: Option<String>,
     pub client_label: Option<String>,
     pub platform: Option<String>,
+    /// Identificador unico de hardware del dispositivo (ej. MAC). Si se omite, se toma del registro del dispositivo.
+    #[serde(default)]
+    pub hardware_id: Option<String>,
+    /// Alias de hardware_id (MAC).
+    #[serde(default)]
+    pub mac: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

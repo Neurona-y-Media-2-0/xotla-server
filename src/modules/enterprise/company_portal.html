@@ -448,6 +448,28 @@
     </section>
   </main>
 
+  <!-- Modal de incidentes por token -->
+  <div id="incidentModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,23,42,0.55); align-items:flex-start; justify-content:center; padding:5vh 16px; overflow:auto;">
+    <div style="background:#FFFFFF; border-radius:12px; max-width:920px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.25); overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid #E2E8F0; background:#F8FAFC;">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <span style="color:#B45309; width:22px; height:22px; display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          <div style="min-width:0;">
+            <h3 id="incidentTitle" style="margin:0; font-size:15px; color:#0F172A;">Incidentes del token</h3>
+            <div id="incidentSubtitle" style="font-size:12px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+          <button class="btn-primary" id="btnIncidentPdf" style="padding:8px 14px; font-size:12.5px;" onclick="downloadIncidentsPdf()">Descargar PDF</button>
+          <button class="act-btn" title="Cerrar" onclick="closeIncidentModal()" style="font-size:16px; line-height:1;">&times;</button>
+        </div>
+      </div>
+      <div id="incidentBody" style="padding:18px 20px; max-height:62vh; overflow:auto; font-size:13px; color:#0F172A;">
+        <p style="color:#64748B;">Cargando...</p>
+      </div>
+    </div>
+  </div>
+
   <script>
     const SVG = {
       checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
@@ -455,7 +477,8 @@
       clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
       eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
       copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
-      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>'
+      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+      incident: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
     };
 
     let portalToken = localStorage.getItem("aegis_portal_token") || "";
@@ -700,6 +723,7 @@
             <td style="text-align:right; white-space:nowrap;">
               <button class="act-btn" title="Ver / Ocultar token" onclick="toggleReveal('${t.token_id}')">${SVG.eye}</button>
               <button class="act-btn" title="Copiar token" onclick="copyTok('${t.token_id}')">${SVG.copy}</button>
+              <button class="act-btn" title="Ver incidentes" onclick="openTokenIncidents('${t.token_id}')">${SVG.incident}</button>
               <button class="act-btn act-btn-del" title="Eliminar token" onclick="deleteMyToken('${t.token_id}')">${SVG.trash}</button>
             </td>
           </tr>
@@ -745,6 +769,307 @@
         msg.style.color = "#DC2626";
         msg.textContent = data.error || "No puedes superar tu limite de tokens contratados.";
       }
+    }
+
+    /* ===================== Incidentes por token ===================== */
+    let currentIncidentData = null;
+
+    function escapeHtml(s) {
+      return String(s ?? "").replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+
+    function closeIncidentModal() {
+      document.getElementById("incidentModal").style.display = "none";
+    }
+
+    async function openTokenIncidents(tokId) {
+      const modal = document.getElementById("incidentModal");
+      const body = document.getElementById("incidentBody");
+      const subtitle = document.getElementById("incidentSubtitle");
+      document.getElementById("incidentTitle").textContent = "Incidentes del token";
+      subtitle.textContent = tokId;
+      body.innerHTML = '<p style="color:#64748B;">Cargando incidentes desde la base de datos...</p>';
+      document.getElementById("btnIncidentPdf").disabled = true;
+      modal.style.display = "flex";
+      currentIncidentData = null;
+
+      try {
+        const res = await fetch(`/v1/portal/token-incidents/${encodeURIComponent(tokId)}`, {
+          headers: { "X-Portal-Token": portalToken }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          body.innerHTML = `<p style="color:#DC2626;">${escapeHtml(data.error || "No se pudieron cargar los incidentes")}</p>`;
+          return;
+        }
+        currentIncidentData = data;
+        renderIncidentModal(data);
+      } catch (e) {
+        body.innerHTML = `<p style="color:#DC2626;">Error al cargar incidentes: ${escapeHtml(String(e))}</p>`;
+      }
+    }
+
+    function renderIncidentModal(data) {
+      const t = data.token || {};
+      const s = data.summary || {};
+      const events = data.events || [];
+      const artifacts = data.artifacts || [];
+
+      document.getElementById("incidentSubtitle").textContent =
+        `${t.token_id || ""} · ${t.assigned_employee_id || "sin usuario"} · cuenta ${data.company_id || ""}`;
+
+      const riskEntries = Object.entries(s.by_risk_level || {});
+      const typeEntries = Object.entries(s.by_event_type || {}).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+      const pill = (txt, color, bg) =>
+        `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;color:${color};background:${bg};">${escapeHtml(txt)}</span>`;
+
+      const riskColor = (lvl) => {
+        const l = String(lvl || "").toUpperCase();
+        if (l.includes("CRIT") || l.includes("HIGH") || l.includes("ALTO")) return ["#DC2626", "#FEE2E2"];
+        if (l.includes("MED") || l.includes("WARN")) return ["#B45309", "#FEF3C7"];
+        if (l.includes("LOW") || l.includes("BAJO")) return ["#1D4ED8", "#DBEAFE"];
+        return ["#475569", "#F1F5F9"];
+      };
+
+      const summaryCards = `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;">
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Total incidentes</div>
+            <div style="font-size:22px;font-weight:700;color:#0F172A;">${s.total_incidents ?? 0}</div>
+          </div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Eventos telemetría</div>
+            <div style="font-size:22px;font-weight:700;color:#0F172A;">${s.total_events ?? 0}</div>
+          </div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Artefactos</div>
+            <div style="font-size:22px;font-weight:700;color:#0F172A;">${s.total_artifacts ?? 0}</div>
+          </div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Maliciosos</div>
+            <div style="font-size:22px;font-weight:700;color:#DC2626;">${s.malicious_artifacts ?? 0}</div>
+          </div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Máx. amenaza</div>
+            <div style="font-size:22px;font-weight:700;color:#0F172A;">${Number(s.max_threat_score ?? 0).toFixed(1)}</div>
+          </div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Máx. riesgo</div>
+            <div style="font-size:22px;font-weight:700;color:#0F172A;">${Number(s.max_current_risk_score ?? 0).toFixed(1)}</div>
+          </div>
+        </div>`;
+
+      const meta = `
+        <div style="font-size:12px;color:#475569;margin-bottom:14px;line-height:1.6;">
+          <div><strong>Token:</strong> ${escapeHtml(t.token_id || "")} · <strong>Estado:</strong> ${escapeHtml(t.status || "")} · <strong>Cuenta:</strong> ${escapeHtml(data.company_id || "")}</div>
+          <div><strong>Usuario:</strong> ${escapeHtml(t.assigned_employee_id || "sin asignar")} · <strong>Plataforma:</strong> ${escapeHtml(t.platform || "")} · <strong>Etiqueta:</strong> ${escapeHtml(t.client_label || "")}</div>
+          <div><strong>Dispositivos:</strong> ${escapeHtml((data.devices || []).join(", ") || "ninguno")}</div>
+          <div><strong>Primer registro:</strong> ${escapeHtml(s.first_seen || "—")} · <strong>Último registro:</strong> ${escapeHtml(s.last_seen || "—")}</div>
+        </div>`;
+
+      const riskBreakdown = riskEntries.length
+        ? `<div style="margin-bottom:12px;"><strong style="font-size:12px;">Por nivel de riesgo:</strong> ${riskEntries.map(([k, v]) => { const [c, b] = riskColor(k); return pill(`${k}: ${v}`, c, b); }).join(" ")}</div>`
+        : "";
+
+      const typeBreakdown = typeEntries.length
+        ? `<div style="margin-bottom:14px;"><strong style="font-size:12px;">Tipos de evento:</strong> ${typeEntries.map(([k, v]) => pill(`${k}: ${v}`, "#475569", "#F1F5F9")).join(" ")}</div>`
+        : "";
+
+      let eventsTable = '<p style="color:#94A3B8;">Sin eventos de telemetría registrados para este token.</p>';
+      if (events.length) {
+        eventsTable = `
+          <div style="overflow:auto; border:1px solid #E2E8F0; border-radius:8px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr style="background:#F8FAFC; text-align:left;">
+              <th style="padding:8px;">Fecha</th><th style="padding:8px;">Riesgo</th><th style="padding:8px;">Tipo</th>
+              <th style="padding:8px;">Fuente</th><th style="padding:8px;">Dispositivo</th><th style="padding:8px;">Usuario</th>
+              <th style="padding:8px;text-align:right;">Amenaza</th><th style="padding:8px;text-align:right;">Riesgo</th><th style="padding:8px;">Evento</th>
+            </tr></thead>
+            <tbody>
+            ${events.map(e => {
+              const [c, b] = riskColor(e.risk_level);
+              return `<tr style="border-top:1px solid #F1F5F9;">
+                <td style="padding:8px;white-space:nowrap;">${escapeHtml(e.received_at || "")}</td>
+                <td style="padding:8px;">${pill(e.risk_level || "?", c, b)}</td>
+                <td style="padding:8px;">${escapeHtml(e.event_type || "")}</td>
+                <td style="padding:8px;">${escapeHtml(e.source || "")}</td>
+                <td style="padding:8px;">${escapeHtml(e.device_id || "")}</td>
+                <td style="padding:8px;">${escapeHtml(e.employee_id || "")}</td>
+                <td style="padding:8px;text-align:right;">${Number(e.threat_score ?? 0).toFixed(1)}</td>
+                <td style="padding:8px;text-align:right;">${Number(e.current_risk_score ?? 0).toFixed(1)}</td>
+                <td style="padding:8px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(JSON.stringify(e.raw_payload ?? {}))}">${escapeHtml(JSON.stringify(e.raw_payload ?? {}))}</td>
+              </tr>`;
+            }).join("")}
+            </tbody>
+          </table></div>`;
+      }
+
+      let artifactsTable = '<p style="color:#94A3B8;">Sin artefactos escaneados registrados para este token.</p>';
+      if (artifacts.length) {
+        artifactsTable = `
+          <div style="overflow:auto; border:1px solid #E2E8F0; border-radius:8px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr style="background:#F8FAFC; text-align:left;">
+              <th style="padding:8px;">Fecha</th><th style="padding:8px;">Veredicto</th><th style="padding:8px;">Tipo</th>
+              <th style="padding:8px;">SHA-256</th><th style="padding:8px;">Dispositivo</th><th style="padding:8px;">Usuario</th>
+              <th style="padding:8px;text-align:right;">Amenaza</th><th style="padding:8px;">Método</th><th style="padding:8px;">Motivos</th>
+            </tr></thead>
+            <tbody>
+            ${artifacts.map(a => `<tr style="border-top:1px solid #F1F5F9;">
+                <td style="padding:8px;white-space:nowrap;">${escapeHtml(a.scanned_at || "")}</td>
+                <td style="padding:8px;">${escapeHtml(a.verdict || "")}</td>
+                <td style="padding:8px;">${escapeHtml(a.file_type || "")}</td>
+                <td style="padding:8px;font-family:monospace;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(a.artifact_sha256 || "")}">${escapeHtml(a.artifact_sha256 || "")}</td>
+                <td style="padding:8px;">${escapeHtml(a.device_id || "")}</td>
+                <td style="padding:8px;">${escapeHtml(a.employee_id || "")}</td>
+                <td style="padding:8px;text-align:right;">${Number(a.threat_score ?? 0).toFixed(1)}</td>
+                <td style="padding:8px;">${escapeHtml(a.detection_method || "")}</td>
+                <td style="padding:8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml((a.detection_reasons || []).join("; "))}">${escapeHtml((a.detection_reasons || []).join("; "))}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table></div>`;
+      }
+
+      const emptyNote = (!events.length && !artifacts.length)
+        ? `<div style="margin:14px 0;padding:12px 14px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;color:#15803D;font-size:13px;">Sin incidentes registrados para este token. No hay eventos ni artefactos vinculados en la base de datos.</div>`
+        : "";
+
+      document.getElementById("incidentBody").innerHTML = `
+        ${meta}
+        ${summaryCards}
+        ${riskBreakdown}
+        ${typeBreakdown}
+        ${emptyNote}
+        <h4 style="margin:16px 0 8px;font-size:13px;color:#0F172A;">Eventos de telemetría (${events.length})</h4>
+        ${eventsTable}
+        <h4 style="margin:18px 0 8px;font-size:13px;color:#0F172A;">Artefactos escaneados (${artifacts.length})</h4>
+        ${artifactsTable}
+      `;
+
+      document.getElementById("btnIncidentPdf").disabled = false;
+    }
+
+    /* ---------- PDF (generador mínimo, sin dependencias) ---------- */
+    function pdfSafe(s) {
+      return String(s ?? "")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\x20-\x7E]/g, " ")
+        .replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")
+        .slice(0, 200);
+    }
+
+    function chunkArray(arr, size) {
+      const out = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out.length ? out : [[]];
+    }
+
+    function buildPdf(pages) {
+      const objects = [];
+      const pageNums = [];
+      let num = 3;
+      const fontNum = 3 + pages.length * 2;
+
+      pages.forEach(lines => {
+        const pageNum = num++;
+        const contentNum = num++;
+        pageNums.push(pageNum);
+
+        let stream = "BT /F1 9 Tf 40 805 Td 12 TL\n";
+        lines.forEach(ln => { stream += `(${ln}) Tj T*\n`; });
+        stream += "ET";
+
+        objects[contentNum] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+        objects[pageNum] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontNum} 0 R >> >> /Contents ${contentNum} 0 R >>`;
+      });
+
+      objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+      objects[2] = `<< /Type /Pages /Kids [${pageNums.map(n => n + " 0 R").join(" ")}] /Count ${pageNums.length} >>`;
+      objects[fontNum] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+
+      const maxNum = fontNum;
+      let pdf = "%PDF-1.4\n";
+      const offsets = [];
+      for (let n = 1; n <= maxNum; n++) {
+        offsets[n] = pdf.length;
+        pdf += `${n} 0 obj\n${objects[n] || "<< >>"}\nendobj\n`;
+      }
+      const xrefStart = pdf.length;
+      pdf += `xref\n0 ${maxNum + 1}\n0000000000 65535 f \n`;
+      for (let n = 1; n <= maxNum; n++) {
+        pdf += `${String(offsets[n]).padStart(10, "0")} 00000 n \n`;
+      }
+      pdf += `trailer\n<< /Size ${maxNum + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+
+      const bytes = new Uint8Array(pdf.length);
+      for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xFF;
+      return bytes;
+    }
+
+    function downloadIncidentsPdf() {
+      const data = currentIncidentData;
+      if (!data) return;
+      const t = data.token || {};
+      const s = data.summary || {};
+      const events = data.events || [];
+      const artifacts = data.artifacts || [];
+
+      const lines = [];
+      lines.push(pdfSafe("RESUMEN DE INCIDENTES - TOKEN"));
+      lines.push(pdfSafe("Token: " + (t.token_id || "")));
+      lines.push(pdfSafe("Cuenta (company_id): " + (data.company_id || "")));
+      lines.push(pdfSafe("Usuario / empleado: " + (t.assigned_employee_id || "sin asignar")));
+      lines.push(pdfSafe("Dispositivos: " + ((data.devices || []).join(", ") || "ninguno")));
+      lines.push(pdfSafe("Estado token: " + (t.status || "")));
+      lines.push(pdfSafe("Plataforma: " + (t.platform || "") + "  Etiqueta: " + (t.client_label || "")));
+      lines.push(pdfSafe("Generado: " + new Date().toISOString()));
+      lines.push("");
+      lines.push(pdfSafe("RESUMEN"));
+      lines.push(pdfSafe("Total incidentes: " + (s.total_incidents ?? 0) + "  (eventos " + (s.total_events ?? 0) + " + artefactos " + (s.total_artifacts ?? 0) + ")"));
+      lines.push(pdfSafe("Artefactos maliciosos: " + (s.malicious_artifacts ?? 0)));
+      lines.push(pdfSafe("Puntaje max. amenaza: " + Number(s.max_threat_score ?? 0).toFixed(2)));
+      lines.push(pdfSafe("Puntaje max. riesgo actual: " + Number(s.max_current_risk_score ?? 0).toFixed(2)));
+      const riskStr = Object.entries(s.by_risk_level || {}).map(([k, v]) => k + "=" + v).join(", ") || "ninguno";
+      lines.push(pdfSafe("Incidentes por nivel de riesgo: " + riskStr));
+      const typeStr = Object.entries(s.by_event_type || {}).map(([k, v]) => k + "=" + v).join(", ") || "ninguno";
+      lines.push(pdfSafe("Tipos de evento: " + typeStr));
+      lines.push(pdfSafe("Primer registro: " + (s.first_seen || "-")));
+      lines.push(pdfSafe("Ultimo registro: " + (s.last_seen || "-")));
+      lines.push("");
+
+      lines.push(pdfSafe("INCIDENTES - EVENTOS DE TELEMETRIA (" + events.length + ")"));
+      if (!events.length) lines.push("Sin eventos registrados.");
+      events.forEach((e, i) => {
+        lines.push(pdfSafe(`#${i + 1} [${e.received_at || ""}] [${e.risk_level || "?"}] type=${e.event_type || ""} source=${e.source || ""}`));
+        lines.push(pdfSafe(`    device=${e.device_id || ""} employee=${e.employee_id || ""} threat=${Number(e.threat_score ?? 0).toFixed(2)} risk=${Number(e.current_risk_score ?? 0).toFixed(2)} event_id=${e.event_id || ""}`));
+        lines.push(pdfSafe("    payload=" + JSON.stringify(e.raw_payload ?? {})));
+      });
+      lines.push("");
+
+      lines.push(pdfSafe("INCIDENTES - ARTEFACTOS ESCANEADOS (" + artifacts.length + ")"));
+      if (!artifacts.length) lines.push("Sin artefactos registrados.");
+      artifacts.forEach((a, i) => {
+        lines.push(pdfSafe(`#${i + 1} [${a.scanned_at || ""}] verdict=${a.verdict || ""} type=${a.file_type || ""} magic=${a.detected_magic || ""}`));
+        lines.push(pdfSafe(`    sha256=${a.artifact_sha256 || ""} device=${a.device_id || ""} employee=${a.employee_id || ""}`));
+        lines.push(pdfSafe(`    threat=${Number(a.threat_score ?? 0).toFixed(2)} method=${a.detection_method || ""} purged=${a.ephemeral_purged}`));
+        lines.push(pdfSafe("    reasons=" + ((a.detection_reasons || []).join("; ") || "-")));
+      });
+
+      const pages = chunkArray(lines, 58);
+      const pdfBytes = buildPdf(pages);
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safeTok = String(t.token_id || "token").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 40);
+      a.href = url;
+      a.download = `incidentes-${safeTok}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
 
     if (portalToken) {

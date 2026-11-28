@@ -26,10 +26,6 @@ pub async fn handshake_handler(
 pub async fn list_devices_handler(
     State(state): State<AppState>,
 ) -> Json<Vec<RegisteredDevice>> {
-    let list = state
-        .devices_by_hw
-        .iter()
-        .map(|entry| entry.value().clone())
-        .collect();
+    let list = state.db.load_all_devices();
     Json(list)
 }

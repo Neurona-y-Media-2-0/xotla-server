@@ -191,6 +191,7 @@ pub async fn portal_create_token_handler(
         status: "AVAILABLE".to_string(),
         activated_at: now.clone(),
         last_used_at: now,
+        hardware_id: None,
     };
 
     state.db.insert_enterprise_token(&new_tok);
@@ -247,6 +248,172 @@ pub async fn portal_update_sites_handler(
     Ok(Json(json!({
         "status": "SITE_POLICY_UPDATED",
         "site_policy": saved
+    })))
+}
+
+pub async fn portal_incidents_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let cid = resolve_portal_company(&state, &headers)?;
+    let company_tokens = state.db.load_enterprise_tokens(&cid);
+    let mut dev_set = std::collections::HashSet::new();
+    let mut emp_set = std::collections::HashSet::new();
+    for t in &company_tokens {
+        if let Some(ref d1) = t.assigned_device_id {
+            dev_set.insert(d1.clone());
+        }
+        if let Some(ref d2) = t.secondary_device_id {
+            dev_set.insert(d2.clone());
+        }
+        if let Some(ref emp) = t.assigned_employee_id {
+            emp_set.insert(emp.clone());
+        }
+    }
+
+    let all_events = state.events.read().await.clone();
+    let artifacts = state.db.load_scanned_artifacts();
+
+    let filtered_events: Vec<_> = all_events
+        .into_iter()
+        .filter(|e| dev_set.contains(&e.device_id) || emp_set.contains(&e.employee_id) || cid == DEFAULT_COMPANY_ID)
+        .collect();
+
+    Ok(Json(json!({
+        "status": "OK",
+        "company_id": cid,
+        "total_events": filtered_events.len(),
+        "events": filtered_events,
+        "artifacts": artifacts
+    })))
+}
+
+/// Incidentes por token: lee de la BD (telemetry_events + scanned_artifacts)
+/// vinculados a los dispositivos asignados al token o a su empleado.
+pub async fn portal_token_incidents_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(token_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let cid = resolve_portal_company(&state, &headers)?;
+
+    let tokens = state.db.load_enterprise_tokens(&cid);
+    let token = tokens
+        .iter()
+        .find(|t| t.token_id == token_id)
+        .cloned()
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Token no encontrado en esta cuenta" })),
+            )
+        })?;
+
+    let mut devices: Vec<String> = Vec::new();
+    let push_dev = |d: &str, list: &mut Vec<String>| {
+        let d = d.trim();
+        if !d.is_empty() && !list.iter().any(|x| x == d) {
+            list.push(d.to_string());
+        }
+    };
+    if let Some(ref d1) = token.assigned_device_id {
+        push_dev(d1, &mut devices);
+    }
+    if let Some(ref d2) = token.secondary_device_id {
+        push_dev(d2, &mut devices);
+    }
+
+    // Identificador unico de hardware (MAC/hardware_id), persistido en el token o en el registro del dispositivo
+    let mut hardware: Option<String> = token.hardware_id.clone().filter(|s| !s.trim().is_empty());
+    if hardware.is_none() {
+        for d in devices.clone() {
+            if let Some(hw) = state.db.hardware_id_for_device(&d) {
+                hardware = Some(hw);
+                break;
+            }
+        }
+    }
+    if let Some(ref hw) = hardware {
+        push_dev(hw, &mut devices);
+        // device_id canonico derivado del hardware (misma regla que el registro de dispositivos)
+        let canonical = crate::modules::devices::service::build_device_id(hw);
+        push_dev(&canonical, &mut devices);
+    }
+
+    let employee = token.assigned_employee_id.as_deref();
+
+    // Incidentes directamente de la base de datos
+    let events = state.db.load_events_for_token(&devices, employee);
+    let artifacts = state.db.load_artifacts_for_token(&devices, employee);
+
+    let total_events = events.len();
+    let total_artifacts = artifacts.len();
+    let total_incidents = total_events + total_artifacts;
+
+    let mut by_risk_level: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    let mut by_event_type: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    let mut max_threat_score: f32 = 0.0;
+    let mut max_current_risk_score: f32 = 0.0;
+
+    let mut first_seen: Option<chrono::DateTime<Utc>> = None;
+    let mut last_seen: Option<chrono::DateTime<Utc>> = None;
+    let bump = |ts: chrono::DateTime<Utc>,
+                    first: &mut Option<chrono::DateTime<Utc>>,
+                    last: &mut Option<chrono::DateTime<Utc>>| {
+        *first = Some(match first {
+            Some(f) if *f <= ts => *f,
+            _ => ts,
+        });
+        *last = Some(match last {
+            Some(l) if *l >= ts => *l,
+            _ => ts,
+        });
+    };
+
+    for e in &events {
+        *by_risk_level.entry(e.risk_level.clone()).or_insert(0) += 1;
+        *by_event_type.entry(e.event_type.clone()).or_insert(0) += 1;
+        if e.threat_score > max_threat_score {
+            max_threat_score = e.threat_score;
+        }
+        if e.current_risk_score > max_current_risk_score {
+            max_current_risk_score = e.current_risk_score;
+        }
+        bump(e.received_at, &mut first_seen, &mut last_seen);
+    }
+
+    let mut malicious_artifacts: u32 = 0;
+    for a in &artifacts {
+        if a.verdict.to_uppercase() != "CLEAN" && a.verdict.to_uppercase() != "BENIGN" {
+            malicious_artifacts += 1;
+        }
+        if a.threat_score > max_threat_score {
+            max_threat_score = a.threat_score;
+        }
+        bump(a.scanned_at, &mut first_seen, &mut last_seen);
+    }
+
+    Ok(Json(json!({
+        "status": "OK",
+        "company_id": cid,
+        "token": token,
+        "devices": devices,
+        "hardware_id": hardware,
+        "employee_id": employee,
+        "summary": {
+            "total_incidents": total_incidents,
+            "total_events": total_events,
+            "total_artifacts": total_artifacts,
+            "malicious_artifacts": malicious_artifacts,
+            "by_risk_level": by_risk_level,
+            "by_event_type": by_event_type,
+            "max_threat_score": max_threat_score,
+            "max_current_risk_score": max_current_risk_score,
+            "first_seen": first_seen.map(|d| d.to_rfc3339()),
+            "last_seen": last_seen.map(|d| d.to_rfc3339()),
+        },
+        "events": events,
+        "artifacts": artifacts,
     })))
 }
 
@@ -406,6 +573,17 @@ pub async fn bind_enterprise_token_handler(
         platform,
     ) {
         Ok(tok) => {
+            // Persistir identificador unico (MAC/hardware) del dispositivo en el token
+            let hw = req
+                .hardware_id
+                .clone()
+                .or_else(|| req.mac.clone())
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| state.db.hardware_id_for_device(&req.device_id));
+            if let Some(hw) = hw {
+                state.db.set_token_hardware_id(&tok.token_id, &hw);
+            }
+            let tok = state.db.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok);
             let acc = state.db.load_enterprise_account(&tok.company_id);
             Ok(Json(json!({
                 "status": "TOKEN_BOUND",

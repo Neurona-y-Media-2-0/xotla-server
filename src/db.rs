@@ -1,6 +1,6 @@
 use std::path::Path;
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use crate::modules::{
@@ -127,6 +127,10 @@ impl Database {
         );
         let _ = conn.execute(
             "ALTER TABLE enterprise_client_tokens ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 2",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE enterprise_client_tokens ADD COLUMN hardware_id TEXT",
             [],
         );
 
@@ -410,7 +414,7 @@ impl Database {
         conn.query_row(
             "SELECT token_id, company_id, token_sha256, assigned_device_id,
                     assigned_employee_id, client_label, platform, status,
-                    activated_at, last_used_at, secondary_device_id, max_devices
+                    activated_at, last_used_at, secondary_device_id, max_devices, hardware_id
              FROM enterprise_client_tokens
              WHERE token_id = ?1",
             params![token_id.trim()],
@@ -433,10 +437,32 @@ impl Database {
                     status: row.get(7)?,
                     activated_at: row.get(8)?,
                     last_used_at: row.get(9)?,
+                    hardware_id: row.get(12).ok().flatten(),
                 })
             },
         )
         .ok()
+    }
+
+    /// Identificador unico de hardware del dispositivo (ej. MAC / hardware_id), si ya esta registrado.
+    pub fn hardware_id_for_device(&self, device_id: &str) -> Option<String> {
+        let conn = self.connect();
+        conn.query_row(
+            "SELECT hardware_id FROM devices WHERE device_id = ?1",
+            params![device_id.trim()],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+    }
+
+    /// Persiste el identificador unico (MAC/hardware) en el token.
+    pub fn set_token_hardware_id(&self, token_id: &str, hardware_id: &str) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "UPDATE enterprise_client_tokens SET hardware_id = ?1 WHERE token_id = ?2",
+            params![hardware_id.trim(), token_id.trim()],
+        );
     }
 
     pub fn bind_device_to_specific_token(
@@ -454,6 +480,7 @@ impl Database {
             return Err("Este token fue revocado o suspendido".to_string());
         }
 
+        let hw = self.hardware_id_for_device(device_id);
         let conn = self.connect();
         let now = Utc::now().to_rfc3339();
         let clean_emp = employee_id
@@ -470,9 +497,10 @@ impl Database {
             let _ = conn.execute(
                 "UPDATE enterprise_client_tokens
                  SET status = 'ACTIVE', last_used_at = ?1,
-                     assigned_employee_id = COALESCE(?2, assigned_employee_id)
+                     assigned_employee_id = COALESCE(?2, assigned_employee_id),
+                     hardware_id = COALESCE(?4, hardware_id)
                  WHERE token_id = ?3",
-                params![now, next_emp, tok.token_id],
+                params![now, next_emp, tok.token_id, hw],
             );
             return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
         }
@@ -496,9 +524,10 @@ impl Database {
                      client_label = ?3,
                      platform = ?4,
                      status = 'ACTIVE',
-                     last_used_at = ?5
+                     last_used_at = ?5,
+                     hardware_id = COALESCE(?7, hardware_id)
                  WHERE token_id = ?6",
-                params![device_id, next_emp, next_label, next_plat, now, tok.token_id],
+                params![device_id, next_emp, next_label, next_plat, now, tok.token_id, hw],
             );
             return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
         }
@@ -517,9 +546,10 @@ impl Database {
                      assigned_employee_id = COALESCE(?2, assigned_employee_id),
                      platform = ?3,
                      status = 'ACTIVE',
-                     last_used_at = ?4
+                     last_used_at = ?4,
+                     hardware_id = COALESCE(?6, hardware_id)
                  WHERE token_id = ?5",
-                params![device_id, next_emp, next_plat, now, tok.token_id],
+                params![device_id, next_emp, next_plat, now, tok.token_id, hw],
             );
             return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
         }
@@ -585,6 +615,7 @@ impl Database {
                     status: "AVAILABLE".to_string(),
                     activated_at: now.clone(),
                     last_used_at: now,
+                    hardware_id: None,
                 };
                 self.insert_enterprise_token(&new_tok);
                 candidate_id = Some(new_id);
@@ -659,7 +690,7 @@ impl Database {
         conn.query_row(
             "SELECT token_id, company_id, token_sha256, assigned_device_id,
                     assigned_employee_id, client_label, platform, status,
-                    activated_at, last_used_at, secondary_device_id, max_devices
+                    activated_at, last_used_at, secondary_device_id, max_devices, hardware_id
              FROM enterprise_client_tokens
              WHERE company_id = ?1
                AND (assigned_device_id = ?2 OR secondary_device_id = ?2)
@@ -684,6 +715,7 @@ impl Database {
                     status: row.get(7)?,
                     activated_at: row.get(8)?,
                     last_used_at: row.get(9)?,
+                    hardware_id: row.get(12).ok().flatten(),
                 })
             },
         )
@@ -718,13 +750,15 @@ impl Database {
         };
 
         let now = Utc::now().to_rfc3339();
+        let hw = self.hardware_id_for_device(device_id);
         if d1.is_none() {
             let _ = conn.execute(
                 "UPDATE enterprise_client_tokens
                  SET assigned_device_id = ?1, assigned_employee_id = ?2,
-                     platform = ?3, status = 'ACTIVE', last_used_at = ?4
+                     platform = ?3, status = 'ACTIVE', last_used_at = ?4,
+                     hardware_id = COALESCE(?6, hardware_id)
                  WHERE token_id = ?5",
-                params![device_id, employee_id, platform, now, tok_id],
+                params![device_id, employee_id, platform, now, tok_id, hw],
             );
             return true;
         }
@@ -738,9 +772,10 @@ impl Database {
             let _ = conn.execute(
                 "UPDATE enterprise_client_tokens
                  SET secondary_device_id = ?1, assigned_employee_id = ?2,
-                     platform = ?3, status = 'ACTIVE', last_used_at = ?4
+                     platform = ?3, status = 'ACTIVE', last_used_at = ?4,
+                     hardware_id = COALESCE(?6, hardware_id)
                  WHERE token_id = ?5",
-                params![device_id, employee_id, combined_plat, now, tok_id],
+                params![device_id, employee_id, combined_plat, now, tok_id, hw],
             );
             return true;
         }
@@ -764,12 +799,13 @@ impl Database {
             "INSERT INTO enterprise_client_tokens (
                 token_id, company_id, token_sha256, assigned_device_id,
                 assigned_employee_id, client_label, platform, status,
-                activated_at, last_used_at, secondary_device_id, max_devices
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                activated_at, last_used_at, secondary_device_id, max_devices, hardware_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             ON CONFLICT(token_id) DO UPDATE SET
                 last_used_at = excluded.last_used_at,
                 status = excluded.status,
-                assigned_employee_id = COALESCE(excluded.assigned_employee_id, enterprise_client_tokens.assigned_employee_id)",
+                assigned_employee_id = COALESCE(excluded.assigned_employee_id, enterprise_client_tokens.assigned_employee_id),
+                hardware_id = COALESCE(excluded.hardware_id, enterprise_client_tokens.hardware_id)",
             params![
                 tok.token_id,
                 tok.company_id,
@@ -783,6 +819,7 @@ impl Database {
                 tok.last_used_at,
                 tok.secondary_device_id,
                 tok.max_devices,
+                tok.hardware_id,
             ],
         );
     }
@@ -800,7 +837,7 @@ impl Database {
         let mut stmt = match conn.prepare(
             "SELECT token_id, company_id, token_sha256, assigned_device_id,
                     assigned_employee_id, client_label, platform, status,
-                    activated_at, last_used_at, secondary_device_id, max_devices
+                    activated_at, last_used_at, secondary_device_id, max_devices, hardware_id
              FROM enterprise_client_tokens
              WHERE company_id = ?1
              ORDER BY activated_at DESC",
@@ -828,6 +865,7 @@ impl Database {
                 status: row.get(7)?,
                 activated_at: row.get(8)?,
                 last_used_at: row.get(9)?,
+                hardware_id: row.get(12).ok().flatten(),
             })
         });
 
@@ -929,6 +967,107 @@ impl Database {
         };
 
         let iter = stmt.query_map([], |row| {
+            let reasons_str: String = row.get(6)?;
+            let scanned_str: String = row.get(10)?;
+            let reasons: Vec<String> = serde_json::from_str(&reasons_str).unwrap_or_default();
+            let scanned_at = DateTime::parse_from_rfc3339(&scanned_str)
+                .map(|d| d.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+            let purged_int: i32 = row.get(9)?;
+
+            Ok(ScannedArtifactRecord {
+                artifact_sha256: row.get(0)?,
+                file_type: row.get(1)?,
+                detected_magic: row.get(2)?,
+                verdict: row.get(3)?,
+                threat_score: row.get(4)?,
+                detection_method: row.get(5)?,
+                detection_reasons: reasons,
+                device_id: row.get(7)?,
+                employee_id: row.get(8)?,
+                ephemeral_purged: purged_int != 0,
+                scanned_at,
+            })
+        });
+
+        match iter {
+            Ok(rows) => rows.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Incidentes (telemetry_events) vinculados a un token: por dispositivo(s) asignado(s) o por empleado.
+    pub fn load_events_for_token(&self, devices: &[String], employee: Option<&str>) -> Vec<StoredTelemetryEvent> {
+        let (where_clause, params_vec) = match token_match_clause(devices, employee) {
+            Some(v) => v,
+            None => return Vec::new(),
+        };
+
+        let conn = self.connect();
+        let sql = format!(
+            "SELECT event_id, device_id, employee_id, source, event_type,
+                    threat_score, current_risk_score, risk_level, raw_payload, received_at
+             FROM telemetry_events
+             WHERE {}
+             ORDER BY received_at DESC",
+            where_clause
+        );
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        let iter = stmt.query_map(params_from_iter(params_vec.iter()), |row| {
+            let raw_str: String = row.get(8)?;
+            let received_str: String = row.get(9)?;
+            let raw_payload: Value = serde_json::from_str(&raw_str).unwrap_or(Value::Null);
+            let received_at = DateTime::parse_from_rfc3339(&received_str)
+                .map(|d| d.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+
+            Ok(StoredTelemetryEvent {
+                event_id: row.get(0)?,
+                device_id: row.get(1)?,
+                employee_id: row.get(2)?,
+                source: row.get(3)?,
+                event_type: row.get(4)?,
+                threat_score: row.get(5)?,
+                current_risk_score: row.get(6)?,
+                risk_level: row.get(7)?,
+                raw_payload,
+                received_at,
+            })
+        });
+
+        match iter {
+            Ok(rows) => rows.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Artefactos escaneados (scanned_artifacts) vinculados a un token: por dispositivo(s) o por empleado.
+    pub fn load_artifacts_for_token(&self, devices: &[String], employee: Option<&str>) -> Vec<ScannedArtifactRecord> {
+        let (where_clause, params_vec) = match token_match_clause(devices, employee) {
+            Some(v) => v,
+            None => return Vec::new(),
+        };
+
+        let conn = self.connect();
+        let sql = format!(
+            "SELECT artifact_sha256, file_type, detected_magic, verdict, threat_score,
+                    detection_method, detection_reasons, device_id, employee_id,
+                    ephemeral_purged, scanned_at
+             FROM scanned_artifacts
+             WHERE {}
+             ORDER BY scanned_at DESC",
+            where_clause
+        );
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        let iter = stmt.query_map(params_from_iter(params_vec.iter()), |row| {
             let reasons_str: String = row.get(6)?;
             let scanned_str: String = row.get(10)?;
             let reasons: Vec<String> = serde_json::from_str(&reasons_str).unwrap_or_default();
@@ -1087,6 +1226,37 @@ impl Database {
             Err(_) => Vec::new(),
         }
     }
+}
+
+/// Construye clausula WHERE (device_id IN (...) OR employee_id = ?) + params para vincular incidentes a un token.
+fn token_match_clause(devices: &[String], employee: Option<&str>) -> Option<(String, Vec<String>)> {
+    let mut conds: Vec<String> = Vec::new();
+    let mut params_vec: Vec<String> = Vec::new();
+
+    let device_list: Vec<String> = devices
+        .iter()
+        .filter(|d| !d.trim().is_empty())
+        .cloned()
+        .collect();
+    if !device_list.is_empty() {
+        let placeholders = device_list.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        conds.push(format!("device_id IN ({})", placeholders));
+        params_vec.extend(device_list.iter().cloned());
+    }
+
+    if let Some(emp) = employee {
+        let emp = emp.trim();
+        if !emp.is_empty() {
+            conds.push("employee_id = ?".to_string());
+            params_vec.push(emp.to_string());
+        }
+    }
+
+    if conds.is_empty() {
+        return None;
+    }
+
+    Some((conds.join(" OR "), params_vec))
 }
 
 pub fn sha256_hex(input: &str) -> String {

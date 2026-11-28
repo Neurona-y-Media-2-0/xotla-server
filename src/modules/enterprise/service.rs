@@ -93,6 +93,7 @@ pub fn create_enterprise_account_with_pool(
             status: "AVAILABLE".to_string(),
             activated_at: now.clone(),
             last_used_at: now.clone(),
+            hardware_id: None,
         };
         state.db.insert_enterprise_token(&tok);
     }
@@ -205,6 +206,7 @@ pub fn issue_or_activate_client_token(
         status: "ACTIVE".to_string(),
         activated_at: now.clone(),
         last_used_at: now,
+        hardware_id: None,
     };
 
     state.db.insert_enterprise_token(&token);
@@ -258,7 +260,11 @@ pub fn auto_bind_device_to_company_token(
         status: "ACTIVE".to_string(),
         activated_at: now.clone(),
         last_used_at: now,
+        hardware_id: None,
     };
 
     state.db.insert_enterprise_token(&token);
+    if let Some(hw) = state.db.hardware_id_for_device(device_id) {
+        state.db.set_token_hardware_id(&token.token_id, &hw);
+    }
 }

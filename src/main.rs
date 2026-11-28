@@ -24,8 +24,8 @@ use crate::{
             edit_enterprise_account_handler, enterprise_admin_page_handler,
             generate_temp_password_handler, get_enterprise_overview_handler,
             issue_enterprise_token_handler, portal_create_token_handler,
-            portal_delete_token_handler, portal_login_handler, portal_logout_handler,
-            portal_me_handler, portal_update_sites_handler, revoke_enterprise_token_handler,
+            portal_delete_token_handler, portal_incidents_handler, portal_login_handler,
+            portal_logout_handler, portal_me_handler, portal_token_incidents_handler, portal_update_sites_handler, revoke_enterprise_token_handler,
             toggle_enterprise_status_handler, update_enterprise_quota_handler,
         },
         phishing_ai::controller::analyze_phishing_handler,
@@ -159,6 +159,8 @@ async fn main() {
         .route("/v1/portal/me", get(portal_me_handler))
         .route("/v1/portal/tokens", post(portal_create_token_handler))
         .route("/v1/portal/tokens/:token_id", delete(portal_delete_token_handler))
+        .route("/v1/portal/incidents", get(portal_incidents_handler))
+        .route("/v1/portal/token-incidents/:token_id", get(portal_token_incidents_handler))
         .route("/v1/portal/sites", put(portal_update_sites_handler))
         .route("/dashboard", get(enterprise_admin_page_handler))
         .route("/tokens", get(enterprise_admin_page_handler))
