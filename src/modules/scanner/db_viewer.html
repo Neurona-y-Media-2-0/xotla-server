@@ -170,7 +170,27 @@
       <ul id="uebaAnomaliesList" class="reason-list"></ul>
     </div>
 
-    <h2>1. Dispositivos Conectados (Tabla: devices)</h2>
+    <h2>1. Cuenta Empresarial Unica y Tokens Activos de Clientes (Tablas: enterprise_accounts &amp; enterprise_client_tokens)</h2>
+    <div class="table-wrap" style="padding: 16px 20px; margin-bottom: 14px;" id="enterpriseHeaderBox"></div>
+    <div class="table-wrap" style="margin-bottom: 24px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Token ID (Licencia App)</th>
+            <th>Hash SHA-256 del Token</th>
+            <th>Cliente / Equipo Asignado</th>
+            <th>Device ID</th>
+            <th>Empleado</th>
+            <th>Plataforma</th>
+            <th>Estado</th>
+            <th>Ultimo Uso</th>
+          </tr>
+        </thead>
+        <tbody id="enterpriseTokensBody"></tbody>
+      </table>
+    </div>
+
+    <h2>2. Dispositivos Conectados (Tabla: devices)</h2>
     <div class="table-wrap">
       <table>
         <thead>
@@ -251,17 +271,48 @@
 
     async function refreshAll() {
       try {
-        const [devsRes, artsRes, evtsRes, profRes] = await Promise.all([
+        const [devsRes, artsRes, evtsRes, profRes, entRes] = await Promise.all([
           fetch("/v1/devices"),
           fetch("/v1/scanner/artifacts"),
           fetch("/v1/events"),
-          fetch("/v1/ueba/profile/emp_042")
+          fetch("/v1/ueba/profile/emp_042"),
+          fetch("/v1/enterprise")
         ]);
 
         const devices = await devsRes.json();
         const artifacts = await artsRes.json();
         const events = await evtsRes.json();
         const profile = await profRes.json();
+        const enterprise = await entRes.json();
+
+        const acc = enterprise.enterprise_account || {};
+        const cTokens = enterprise.client_tokens || [];
+        document.getElementById("enterpriseHeaderBox").innerHTML = `
+          <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; align-items:center;">
+            <div>
+              <div style="font-size:15px; font-weight:700; color:#fff;">${acc.company_name || "Empresa"} <span class="mono">${acc.company_id || ""}</span></div>
+              <div class="muted">Cuenta Maestra Unica: <strong>${acc.master_account_email || ""}</strong> · Plan: <strong>${acc.plan_tier || ""}</strong></div>
+            </div>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+              <span class="mono">Tokens Asignados: <strong>${acc.total_allocated_tokens ?? 0}</strong></span>
+              <span class="mono" style="color:#3fb950;">Tokens Activos en Uso: <strong>${acc.active_tokens_used ?? 0}</strong></span>
+              <span class="mono" style="color:#58a6ff;">Tokens Disponibles: <strong>${acc.available_tokens ?? 0}</strong></span>
+            </div>
+          </div>
+        `;
+
+        document.getElementById("enterpriseTokensBody").innerHTML = cTokens.map(t => `
+          <tr>
+            <td><span class="mono">${t.token_id}</span></td>
+            <td><span class="mono" title="${t.token_sha256}">${shortSha(t.token_sha256)}</span></td>
+            <td><strong>${t.client_label}</strong></td>
+            <td><span class="mono">${t.assigned_device_id || "-"}</span></td>
+            <td>${t.assigned_employee_id || "-"}</td>
+            <td>${t.platform}</td>
+            <td><span class="${t.status === 'ACTIVE' ? 'badge badge-clean' : 'badge badge-malicious'}">${t.status}</span></td>
+            <td class="muted">${fmtDate(t.last_used_at)}</td>
+          </tr>
+        `).join("") || '<tr><td colspan="8" class="muted">Sin tokens activos</td></tr>';
 
         document.getElementById("statDevices").textContent = devices.length;
         document.getElementById("statArtifacts").textContent = artifacts.length;

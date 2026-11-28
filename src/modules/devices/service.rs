@@ -3,7 +3,10 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use crate::{
     db::sha256_hex,
-    modules::devices::dto::{AgentKind, HandshakeRequest, HandshakeResponse, RegisteredDevice},
+    modules::{
+        devices::dto::{AgentKind, HandshakeRequest, HandshakeResponse, RegisteredDevice},
+        enterprise::service::auto_bind_device_to_company_token,
+    },
     state::AppState,
 };
 
@@ -75,6 +78,14 @@ pub fn register_or_recognize_device(
     req: HandshakeRequest,
 ) -> HandshakeResponse {
     if let Some(known) = find_existing_device(state, &req.hardware_id) {
+        auto_bind_device_to_company_token(
+            state,
+            &known.device_id,
+            &known.employee_id,
+            &known.hostname,
+            &known.platform,
+            &known.session_token,
+        );
         let risk = state
             .profiles
             .get(&known.employee_id)
@@ -152,6 +163,14 @@ pub fn register_or_recognize_device(
     };
 
     state.db.upsert_device(&registered);
+    auto_bind_device_to_company_token(
+        state,
+        &registered.device_id,
+        &registered.employee_id,
+        &registered.hostname,
+        &registered.platform,
+        &registered.session_token,
+    );
     state
         .devices_by_hw
         .insert(canonical_hw.clone(), registered);

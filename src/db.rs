@@ -5,6 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use crate::modules::{
     devices::dto::{AgentKind, RegisteredDevice},
+    enterprise::dto::{EnterpriseAccount, EnterpriseClientToken},
     scanner::dto::ScannedArtifactRecord,
     telemetry::dto::StoredTelemetryEvent,
 };
@@ -77,9 +78,227 @@ impl Database {
                 ephemeral_purged INTEGER NOT NULL DEFAULT 1,
                 scanned_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS enterprise_accounts (
+                company_id TEXT PRIMARY KEY,
+                company_name TEXT NOT NULL,
+                master_account_email TEXT NOT NULL,
+                plan_tier TEXT NOT NULL,
+                total_allocated_tokens INTEGER NOT NULL,
+                account_status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS enterprise_client_tokens (
+                token_id TEXT PRIMARY KEY,
+                company_id TEXT NOT NULL,
+                token_sha256 TEXT NOT NULL UNIQUE,
+                assigned_device_id TEXT UNIQUE,
+                assigned_employee_id TEXT,
+                client_label TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                status TEXT NOT NULL,
+                activated_at TEXT NOT NULL,
+                last_used_at TEXT NOT NULL
+            );
             ",
         )
         .expect("Failed to initialize SQLite schema");
+
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO enterprise_accounts (
+                company_id, company_name, master_account_email, plan_tier,
+                total_allocated_tokens, account_status, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                "comp_aegis_qro_01",
+                "Corporativo Industrial Queretaro S.A. de C.V.",
+                "seguridad@corporativo-qro.mx",
+                "ENTERPRISE_ZERO_TRUST",
+                10,
+                "ACTIVE",
+                Utc::now().to_rfc3339()
+            ],
+        );
+    }
+
+    pub fn load_enterprise_account(&self, company_id: &str) -> EnterpriseAccount {
+        let conn = self.connect();
+        let active_used: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM enterprise_client_tokens WHERE company_id = ?1 AND status = 'ACTIVE'",
+                params![company_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        conn.query_row(
+            "SELECT company_id, company_name, master_account_email, plan_tier,
+                    total_allocated_tokens, account_status, created_at
+             FROM enterprise_accounts WHERE company_id = ?1",
+            params![company_id],
+            |row| {
+                let total: u32 = row.get(4)?;
+                let avail = total.saturating_sub(active_used);
+                Ok(EnterpriseAccount {
+                    company_id: row.get(0)?,
+                    company_name: row.get(1)?,
+                    master_account_email: row.get(2)?,
+                    plan_tier: row.get(3)?,
+                    total_allocated_tokens: total,
+                    active_tokens_used: active_used,
+                    available_tokens: avail,
+                    account_status: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            },
+        )
+        .unwrap_or_else(|_| EnterpriseAccount {
+            company_id: company_id.to_string(),
+            company_name: "Corporativo Industrial Queretaro S.A. de C.V.".to_string(),
+            master_account_email: "seguridad@corporativo-qro.mx".to_string(),
+            plan_tier: "ENTERPRISE_ZERO_TRUST".to_string(),
+            total_allocated_tokens: 10,
+            active_tokens_used: active_used,
+            available_tokens: 10u32.saturating_sub(active_used),
+            account_status: "ACTIVE".to_string(),
+            created_at: Utc::now().to_rfc3339(),
+        })
+    }
+
+    pub fn upsert_enterprise_account(
+        &self,
+        company_id: &str,
+        company_name: &str,
+        master_email: &str,
+        total_tokens: u32,
+    ) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "INSERT INTO enterprise_accounts (
+                company_id, company_name, master_account_email, plan_tier,
+                total_allocated_tokens, account_status, created_at
+            ) VALUES (?1, ?2, ?3, 'ENTERPRISE_ZERO_TRUST', ?4, 'ACTIVE', ?5)
+            ON CONFLICT(company_id) DO UPDATE SET
+                company_name = excluded.company_name,
+                master_account_email = excluded.master_account_email,
+                total_allocated_tokens = excluded.total_allocated_tokens",
+            params![
+                company_id,
+                company_name,
+                master_email,
+                total_tokens,
+                Utc::now().to_rfc3339()
+            ],
+        );
+    }
+
+    pub fn find_token_by_device(
+        &self,
+        company_id: &str,
+        device_id: &str,
+    ) -> Option<EnterpriseClientToken> {
+        let conn = self.connect();
+        conn.query_row(
+            "SELECT token_id, company_id, token_sha256, assigned_device_id,
+                    assigned_employee_id, client_label, platform, status,
+                    activated_at, last_used_at
+             FROM enterprise_client_tokens
+             WHERE company_id = ?1 AND assigned_device_id = ?2 AND status = 'ACTIVE'",
+            params![company_id, device_id],
+            |row| {
+                Ok(EnterpriseClientToken {
+                    token_id: row.get(0)?,
+                    company_id: row.get(1)?,
+                    token_sha256: row.get(2)?,
+                    assigned_device_id: row.get(3)?,
+                    assigned_employee_id: row.get(4)?,
+                    client_label: row.get(5)?,
+                    platform: row.get(6)?,
+                    status: row.get(7)?,
+                    activated_at: row.get(8)?,
+                    last_used_at: row.get(9)?,
+                })
+            },
+        )
+        .ok()
+    }
+
+    pub fn touch_device_token(&self, company_id: &str, device_id: &str) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "UPDATE enterprise_client_tokens SET last_used_at = ?1 WHERE company_id = ?2 AND assigned_device_id = ?3",
+            params![Utc::now().to_rfc3339(), company_id, device_id],
+        );
+    }
+
+    pub fn insert_enterprise_token(&self, tok: &EnterpriseClientToken) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "INSERT INTO enterprise_client_tokens (
+                token_id, company_id, token_sha256, assigned_device_id,
+                assigned_employee_id, client_label, platform, status,
+                activated_at, last_used_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ON CONFLICT(token_id) DO UPDATE SET
+                last_used_at = excluded.last_used_at,
+                status = excluded.status",
+            params![
+                tok.token_id,
+                tok.company_id,
+                tok.token_sha256,
+                tok.assigned_device_id,
+                tok.assigned_employee_id,
+                tok.client_label,
+                tok.platform,
+                tok.status,
+                tok.activated_at,
+                tok.last_used_at,
+            ],
+        );
+    }
+
+    pub fn revoke_enterprise_token(&self, token_id: &str) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "UPDATE enterprise_client_tokens SET status = 'REVOKED' WHERE token_id = ?1",
+            params![token_id],
+        );
+    }
+
+    pub fn load_enterprise_tokens(&self, company_id: &str) -> Vec<EnterpriseClientToken> {
+        let conn = self.connect();
+        let mut stmt = match conn.prepare(
+            "SELECT token_id, company_id, token_sha256, assigned_device_id,
+                    assigned_employee_id, client_label, platform, status,
+                    activated_at, last_used_at
+             FROM enterprise_client_tokens
+             WHERE company_id = ?1
+             ORDER BY activated_at DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        let iter = stmt.query_map(params![company_id], |row| {
+            Ok(EnterpriseClientToken {
+                token_id: row.get(0)?,
+                company_id: row.get(1)?,
+                token_sha256: row.get(2)?,
+                assigned_device_id: row.get(3)?,
+                assigned_employee_id: row.get(4)?,
+                client_label: row.get(5)?,
+                platform: row.get(6)?,
+                status: row.get(7)?,
+                activated_at: row.get(8)?,
+                last_used_at: row.get(9)?,
+            })
+        });
+
+        match iter {
+            Ok(rows) => rows.filter_map(Result::ok).collect(),
+            Err(_) => Vec::new(),
+        }
     }
 
     pub fn upsert_device(&self, dev: &RegisteredDevice) {

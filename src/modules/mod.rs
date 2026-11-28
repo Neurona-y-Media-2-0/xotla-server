@@ -1,4 +1,5 @@
 pub mod devices;
+pub mod enterprise;
 pub mod phishing_ai;
 pub mod policy;
 pub mod scanner;

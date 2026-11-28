@@ -46,15 +46,16 @@ impl AppState {
         let devices_by_id = Arc::new(DashMap::new());
         let token_to_hw = Arc::new(DashMap::new());
 
-        for dev in db.load_all_devices() {
+        let initial_devices = db.load_all_devices();
+        for dev in &initial_devices {
             devices_by_id.insert(dev.device_id.clone(), dev.hardware_id.clone());
             token_to_hw.insert(dev.session_token.clone(), dev.hardware_id.clone());
-            devices_by_hw.insert(dev.hardware_id.clone(), dev);
+            devices_by_hw.insert(dev.hardware_id.clone(), dev.clone());
         }
 
         let initial_events = db.load_all_events();
 
-        Self {
+        let state = Self {
             config,
             db,
             devices_by_hw,
@@ -72,6 +73,19 @@ impl AppState {
             sanitized_payloads_count: Arc::new(AtomicU64::new(0)),
             decrypted_payloads_count: Arc::new(AtomicU64::new(0)),
             ws_broadcaster: tx,
+        };
+
+        for dev in initial_devices {
+            crate::modules::enterprise::service::auto_bind_device_to_company_token(
+                &state,
+                &dev.device_id,
+                &dev.employee_id,
+                &dev.hostname,
+                &dev.platform,
+                &dev.session_token,
+            );
         }
+
+        state
     }
 }

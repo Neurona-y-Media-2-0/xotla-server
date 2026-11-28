@@ -9,7 +9,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::IntoResponse,
-    routing::{get, head, post},
+    routing::{get, head, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -18,6 +18,10 @@ use crate::{
     config::AppConfig,
     modules::{
         devices::controller::{handshake_handler, list_devices_handler},
+        enterprise::controller::{
+            get_enterprise_overview_handler, issue_enterprise_token_handler,
+            revoke_enterprise_token_handler, update_enterprise_quota_handler,
+        },
         phishing_ai::controller::analyze_phishing_handler,
         policy::controller::{
             admin_login_handler, admin_logout_handler, demo_malicious_exe_handler,
@@ -64,6 +68,10 @@ async fn root_info_handler(State(state): State<AppState>) -> Json<Value> {
             "admin_logout": "POST /admin/logout",
             "admin_policy": "GET/PUT /admin/policy",
             "demo_phishing": "GET /demo-phishing",
+            "enterprise_overview": "GET /v1/enterprise",
+            "enterprise_quota": "PUT /v1/enterprise/quota",
+            "enterprise_issue_token": "POST /v1/enterprise/tokens/issue",
+            "enterprise_revoke_token": "POST /v1/enterprise/tokens/revoke",
             "phishing_ai_analyze": "POST /v1/phishing/analyze",
             "scanner_inspect": "POST /v1/scanner/inspect",
             "scanned_artifacts": "GET /v1/scanner/artifacts",
@@ -99,6 +107,10 @@ async fn main() {
         .route("/v1/devices/handshake", post(handshake_handler))
         .route("/v1/devices/register", post(handshake_handler))
         .route("/v1/devices", get(list_devices_handler))
+        .route("/v1/enterprise", get(get_enterprise_overview_handler))
+        .route("/v1/enterprise/quota", put(update_enterprise_quota_handler))
+        .route("/v1/enterprise/tokens/issue", post(issue_enterprise_token_handler))
+        .route("/v1/enterprise/tokens/revoke", post(revoke_enterprise_token_handler))
         .route("/v1/ws", get(ws_handler))
         .route("/v1/telemetry/browser", post(browser_telemetry_handler))
         .route("/telemetry/browser", post(browser_telemetry_handler))
