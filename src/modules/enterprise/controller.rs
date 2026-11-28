@@ -56,16 +56,19 @@ fn resolve_portal_company(
             )
         })?;
 
-    state
-        .portal_sessions
-        .get(&tok)
-        .map(|entry| entry.value().clone())
-        .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({ "error": "Sesion expirada, vuelve a iniciar sesion" })),
-            )
-        })
+    if let Some(entry) = state.portal_sessions.get(&tok) {
+        return Ok(entry.value().clone());
+    }
+
+    if let Some(cid) = state.db.lookup_portal_session(&tok) {
+        state.portal_sessions.insert(tok.clone(), cid.clone());
+        return Ok(cid);
+    }
+
+    Err((
+        StatusCode::UNAUTHORIZED,
+        Json(json!({ "error": "Sesion expirada, vuelve a iniciar sesion" })),
+    ))
 }
 
 pub async fn portal_login_handler(
@@ -87,6 +90,9 @@ pub async fn portal_login_handler(
     state
         .portal_sessions
         .insert(portal_token.clone(), account.company_id.clone());
+    state
+        .db
+        .save_portal_session(&portal_token, &account.company_id, &account.master_account_email);
 
     Ok(Json(json!({
         "status": "AUTHENTICATED",
@@ -103,7 +109,9 @@ pub async fn portal_logout_handler(
         .get("x-portal-token")
         .and_then(|v| v.to_str().ok())
     {
-        state.portal_sessions.remove(tok.trim());
+        let t = tok.trim();
+        state.portal_sessions.remove(t);
+        state.db.delete_portal_session(t);
     }
     Json(json!({ "status": "LOGGED_OUT" }))
 }

@@ -925,11 +925,20 @@
 
     async function loadPortal() {
       if (!portalToken) return;
-      const res = await fetch("/v1/portal/me", {
-        headers: { "X-Portal-Token": portalToken }
-      });
-      if (!res.ok) {
+      let res;
+      try {
+        res = await fetch("/v1/portal/me", {
+          headers: { "X-Portal-Token": portalToken }
+        });
+      } catch (err) {
+        // Error de red temporal o servidor reiniciando: no cerrar la sesion
+        return;
+      }
+      if (res.status === 401) {
         await doLogout();
+        return;
+      }
+      if (!res.ok) {
         return;
       }
       const data = await res.json();

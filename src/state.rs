@@ -56,6 +56,11 @@ impl AppState {
 
         let initial_events = db.load_all_events();
 
+        let portal_sessions = Arc::new(DashMap::new());
+        for (tok, cid) in db.load_all_portal_sessions() {
+            portal_sessions.insert(tok, cid);
+        }
+
         let state = Self {
             config,
             db,
@@ -68,7 +73,7 @@ impl AppState {
             policy: Arc::new(RwLock::new(ExtensionPolicy::default())),
             policy_audit_log: Arc::new(RwLock::new(Vec::new())),
             admin_sessions: Arc::new(DashMap::new()),
-            portal_sessions: Arc::new(DashMap::new()),
+            portal_sessions,
             rate_limits: Arc::new(DashMap::new()),
             blocked_threats: Arc::new(RwLock::new(Vec::new())),
             blocked_requests_count: Arc::new(AtomicU64::new(0)),

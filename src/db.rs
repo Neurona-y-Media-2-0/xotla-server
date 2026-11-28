@@ -109,6 +109,14 @@ impl Database {
                 blacklisted_sites_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS portal_sessions (
+                session_token TEXT PRIMARY KEY,
+                company_id TEXT NOT NULL,
+                master_email TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
             ",
         )
         .expect("Failed to initialize SQLite schema");
@@ -189,6 +197,57 @@ impl Database {
         )
         .map(|rows| rows > 0)
         .unwrap_or(false)
+    }
+
+    pub fn save_portal_session(&self, token: &str, company_id: &str, email: &str) {
+        let conn = self.connect();
+        let now = Utc::now().to_rfc3339();
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO portal_sessions (session_token, company_id, master_email, created_at, last_seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![token, company_id, email, now, now],
+        );
+    }
+
+    pub fn lookup_portal_session(&self, token: &str) -> Option<String> {
+        let conn = self.connect();
+        let mut stmt = conn
+            .prepare("SELECT company_id FROM portal_sessions WHERE session_token = ?1")
+            .ok()?;
+        let res: Option<String> = stmt.query_row(params![token], |row| row.get(0)).ok();
+        if res.is_some() {
+            let now = Utc::now().to_rfc3339();
+            let _ = conn.execute(
+                "UPDATE portal_sessions SET last_seen_at = ?1 WHERE session_token = ?2",
+                params![now, token],
+            );
+        }
+        res
+    }
+
+    pub fn delete_portal_session(&self, token: &str) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "DELETE FROM portal_sessions WHERE session_token = ?1",
+            params![token],
+        );
+    }
+
+    pub fn load_all_portal_sessions(&self) -> Vec<(String, String)> {
+        let conn = self.connect();
+        let mut stmt = match conn.prepare("SELECT session_token, company_id FROM portal_sessions") {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let iter = match stmt.query_map([], |row| {
+            let tok: String = row.get(0)?;
+            let cid: String = row.get(1)?;
+            Ok((tok, cid))
+        }) {
+            Ok(it) => it,
+            Err(_) => return Vec::new(),
+        };
+        iter.filter_map(Result::ok).collect()
     }
 
     pub fn load_company_site_policy(&self, company_id: &str) -> CompanySitePolicy {
