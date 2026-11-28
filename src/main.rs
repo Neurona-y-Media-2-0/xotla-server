@@ -129,6 +129,8 @@ async fn main() {
             get(get_admin_policy_handler).put(put_admin_policy_handler),
         )
         .route("/demo-phishing", get(demo_phishing_page_handler))
+        .route("/dashboard", get(db_viewer_page_handler))
+        .route("/soc", get(db_viewer_page_handler))
         .route("/db", get(db_viewer_page_handler))
         .route("/v1/db", get(db_viewer_page_handler))
         .route("/factura_noviembre.exe", get(demo_malicious_exe_handler))
