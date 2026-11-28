@@ -18,6 +18,7 @@ use crate::{
     config::AppConfig,
     modules::{
         devices::controller::{handshake_handler, list_devices_handler},
+        phishing_ai::controller::analyze_phishing_handler,
         policy::controller::{
             admin_login_handler, admin_logout_handler, demo_malicious_exe_handler,
             demo_phishing_page_handler, get_admin_policy_handler, get_public_policy_handler,
@@ -63,6 +64,7 @@ async fn root_info_handler(State(state): State<AppState>) -> Json<Value> {
             "admin_logout": "POST /admin/logout",
             "admin_policy": "GET/PUT /admin/policy",
             "demo_phishing": "GET /demo-phishing",
+            "phishing_ai_analyze": "POST /v1/phishing/analyze",
             "scanner_inspect": "POST /v1/scanner/inspect",
             "scanned_artifacts": "GET /v1/scanner/artifacts",
             "ueba_profile": "GET /v1/ueba/profile/{employee_id}",
@@ -118,6 +120,8 @@ async fn main() {
         .route("/db", get(db_viewer_page_handler))
         .route("/v1/db", get(db_viewer_page_handler))
         .route("/factura_noviembre.exe", get(demo_malicious_exe_handler))
+        .route("/v1/phishing/analyze", post(analyze_phishing_handler))
+        .route("/phishing/analyze", post(analyze_phishing_handler))
         .route("/v1/scanner/inspect", post(scan_file_handler))
         .route("/v1/scanner/artifacts", get(list_scanned_artifacts_handler))
         .route("/v1/ueba/profile/:employee_id", get(get_profile_handler))
