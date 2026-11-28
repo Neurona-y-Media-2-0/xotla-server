@@ -61,7 +61,10 @@ pub fn create_enterprise_account_with_pool(
             company_id: cid.clone(),
             token_sha256: tok_sha,
             assigned_device_id: None,
+            secondary_device_id: None,
             assigned_employee_id: None,
+            max_devices: 2,
+            used_devices_count: 0,
             client_label: format!("Licencia #{}", current_count + idx + 1),
             platform: "UNASSIGNED".to_string(),
             status: "AVAILABLE".to_string(),
@@ -165,12 +168,16 @@ pub fn issue_or_activate_client_token(
     let token_id = format!("aegis_lic_{}", &token_sha256[..20]);
     let now = Utc::now().to_rfc3339();
 
+    let used_count = u32::from(req.device_id.is_some());
     let token = EnterpriseClientToken {
         token_id,
         company_id: cid.clone(),
         token_sha256,
         assigned_device_id: req.device_id,
+        secondary_device_id: None,
         assigned_employee_id: Some(req.employee_id),
+        max_devices: 2,
+        used_devices_count: used_count,
         client_label: req.client_label,
         platform: req.platform.unwrap_or_else(|| "multi-platform".to_string()),
         status: "ACTIVE".to_string(),
@@ -197,6 +204,13 @@ pub fn auto_bind_device_to_company_token(
         return;
     }
 
+    if state
+        .db
+        .bind_device_to_existing_user_token(cid, employee_id, device_id, platform)
+    {
+        return;
+    }
+
     let account = state.db.load_enterprise_account(cid);
     if account.active_tokens_used >= account.total_allocated_tokens {
         return;
@@ -208,7 +222,10 @@ pub fn auto_bind_device_to_company_token(
         company_id: cid.to_string(),
         token_sha256: sha256_hex(session_token),
         assigned_device_id: Some(device_id.to_string()),
+        secondary_device_id: None,
         assigned_employee_id: Some(employee_id.to_string()),
+        max_devices: 2,
+        used_devices_count: 1,
         client_label: hostname.to_string(),
         platform: platform.to_string(),
         status: "ACTIVE".to_string(),

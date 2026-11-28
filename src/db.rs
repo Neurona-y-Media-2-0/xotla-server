@@ -121,6 +121,14 @@ impl Database {
             "ALTER TABLE enterprise_accounts ADD COLUMN temp_password_expires_at TEXT",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE enterprise_client_tokens ADD COLUMN secondary_device_id TEXT",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE enterprise_client_tokens ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 2",
+            [],
+        );
 
         let _ = conn.execute(
             "INSERT OR IGNORE INTO enterprise_accounts (
@@ -460,17 +468,26 @@ impl Database {
         conn.query_row(
             "SELECT token_id, company_id, token_sha256, assigned_device_id,
                     assigned_employee_id, client_label, platform, status,
-                    activated_at, last_used_at
+                    activated_at, last_used_at, secondary_device_id, max_devices
              FROM enterprise_client_tokens
-             WHERE company_id = ?1 AND assigned_device_id = ?2 AND status = 'ACTIVE'",
+             WHERE company_id = ?1
+               AND (assigned_device_id = ?2 OR secondary_device_id = ?2)
+               AND status = 'ACTIVE'",
             params![company_id, device_id],
             |row| {
+                let d1: Option<String> = row.get(3)?;
+                let d2: Option<String> = row.get(10).ok().flatten();
+                let max_dev: u32 = row.get(11).unwrap_or(2);
+                let used = u32::from(d1.is_some()) + u32::from(d2.is_some());
                 Ok(EnterpriseClientToken {
                     token_id: row.get(0)?,
                     company_id: row.get(1)?,
                     token_sha256: row.get(2)?,
-                    assigned_device_id: row.get(3)?,
+                    assigned_device_id: d1,
+                    secondary_device_id: d2,
                     assigned_employee_id: row.get(4)?,
+                    max_devices: max_dev,
+                    used_devices_count: used,
                     client_label: row.get(5)?,
                     platform: row.get(6)?,
                     status: row.get(7)?,
@@ -482,10 +499,70 @@ impl Database {
         .ok()
     }
 
+    pub fn bind_device_to_existing_user_token(
+        &self,
+        company_id: &str,
+        employee_id: &str,
+        device_id: &str,
+        platform: &str,
+    ) -> bool {
+        let conn = self.connect();
+        let candidate: Option<(String, Option<String>, Option<String>, String)> = conn
+            .query_row(
+                "SELECT token_id, assigned_device_id, secondary_device_id, platform
+                 FROM enterprise_client_tokens
+                 WHERE company_id = ?1
+                   AND (assigned_employee_id = ?2 OR assigned_employee_id IS NULL)
+                   AND status IN ('ACTIVE', 'AVAILABLE')
+                   AND (assigned_device_id IS NULL OR secondary_device_id IS NULL)
+                 ORDER BY CASE WHEN assigned_employee_id = ?2 THEN 0 ELSE 1 END, activated_at ASC
+                 LIMIT 1",
+                params![company_id, employee_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .ok();
+
+        let Some((tok_id, d1, d2, old_plat)) = candidate else {
+            return false;
+        };
+
+        let now = Utc::now().to_rfc3339();
+        if d1.is_none() {
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens
+                 SET assigned_device_id = ?1, assigned_employee_id = ?2,
+                     platform = ?3, status = 'ACTIVE', last_used_at = ?4
+                 WHERE token_id = ?5",
+                params![device_id, employee_id, platform, now, tok_id],
+            );
+            return true;
+        }
+
+        if d1.as_deref() != Some(device_id) && d2.is_none() {
+            let combined_plat = if old_plat == "UNASSIGNED" || old_plat == platform {
+                platform.to_string()
+            } else {
+                format!("{} + {}", old_plat, platform)
+            };
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens
+                 SET secondary_device_id = ?1, assigned_employee_id = ?2,
+                     platform = ?3, status = 'ACTIVE', last_used_at = ?4
+                 WHERE token_id = ?5",
+                params![device_id, employee_id, combined_plat, now, tok_id],
+            );
+            return true;
+        }
+
+        false
+    }
+
     pub fn touch_device_token(&self, company_id: &str, device_id: &str) {
         let conn = self.connect();
         let _ = conn.execute(
-            "UPDATE enterprise_client_tokens SET last_used_at = ?1 WHERE company_id = ?2 AND assigned_device_id = ?3",
+            "UPDATE enterprise_client_tokens
+             SET last_used_at = ?1
+             WHERE company_id = ?2 AND (assigned_device_id = ?3 OR secondary_device_id = ?3)",
             params![Utc::now().to_rfc3339(), company_id, device_id],
         );
     }
@@ -496,11 +573,12 @@ impl Database {
             "INSERT INTO enterprise_client_tokens (
                 token_id, company_id, token_sha256, assigned_device_id,
                 assigned_employee_id, client_label, platform, status,
-                activated_at, last_used_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                activated_at, last_used_at, secondary_device_id, max_devices
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             ON CONFLICT(token_id) DO UPDATE SET
                 last_used_at = excluded.last_used_at,
-                status = excluded.status",
+                status = excluded.status,
+                assigned_employee_id = COALESCE(excluded.assigned_employee_id, enterprise_client_tokens.assigned_employee_id)",
             params![
                 tok.token_id,
                 tok.company_id,
@@ -512,6 +590,8 @@ impl Database {
                 tok.status,
                 tok.activated_at,
                 tok.last_used_at,
+                tok.secondary_device_id,
+                tok.max_devices,
             ],
         );
     }
@@ -529,7 +609,7 @@ impl Database {
         let mut stmt = match conn.prepare(
             "SELECT token_id, company_id, token_sha256, assigned_device_id,
                     assigned_employee_id, client_label, platform, status,
-                    activated_at, last_used_at
+                    activated_at, last_used_at, secondary_device_id, max_devices
              FROM enterprise_client_tokens
              WHERE company_id = ?1
              ORDER BY activated_at DESC",
@@ -539,12 +619,19 @@ impl Database {
         };
 
         let iter = stmt.query_map(params![company_id], |row| {
+            let d1: Option<String> = row.get(3)?;
+            let d2: Option<String> = row.get(10).ok().flatten();
+            let max_dev: u32 = row.get(11).unwrap_or(2);
+            let used = u32::from(d1.is_some()) + u32::from(d2.is_some());
             Ok(EnterpriseClientToken {
                 token_id: row.get(0)?,
                 company_id: row.get(1)?,
                 token_sha256: row.get(2)?,
-                assigned_device_id: row.get(3)?,
+                assigned_device_id: d1,
+                secondary_device_id: d2,
                 assigned_employee_id: row.get(4)?,
+                max_devices: max_dev,
+                used_devices_count: used,
                 client_label: row.get(5)?,
                 platform: row.get(6)?,
                 status: row.get(7)?,

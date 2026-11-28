@@ -366,17 +366,35 @@
     </div>
     <div id="sitesMsg" class="ok-msg" style="margin-bottom:22px;"></div>
 
-    <!-- TOKENS DE LA EMPRESA -->
+    <!-- TOKENS DE LA EMPRESA (2 DISPOSITIVOS POR USUARIO + FILTRO) -->
     <section>
       <div class="section-head">
         <div>
-          <h3 class="section-title">Mis Tokens de Licencia</h3>
-          <span style="font-size:12.5px; color:#64748B;" id="tokensHint">Puedes eliminar un token para generar uno nuevo dentro de tu limite permitido.</span>
+          <h3 class="section-title">Tokens de Usuarios (2 Dispositivos por Token)</h3>
+          <span style="font-size:12.5px; color:#64748B;" id="tokensHint">Cada token permite hasta 2 dispositivos por usuario (ej. Laptop + Android).</span>
         </div>
-        <button class="btn-primary" id="btnCreateToken" onclick="createReplacementToken()">
-          + Crear Nuevo Token
-        </button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="inpNewUserEmp" placeholder="Usuario / ID (ej. emp_042)" style="width:200px;" />
+          <button class="btn-primary" id="btnCreateToken" onclick="createReplacementToken()">
+            + Crear Nuevo Token
+          </button>
+        </div>
       </div>
+
+      <!-- Barra de Filtros por Usuario y Estado -->
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+        <input type="text" id="filterSearchUser" placeholder="Buscar por usuario, dispositivo o token..." style="flex:1; min-width:230px;" oninput="applyTokenFilter()" />
+        <select id="filterSelectUser" style="background:#FFFFFF; border:1px solid #CBD5E1; color:#0F172A; padding:9px 12px; border-radius:7px; font-size:13px;" onchange="applyTokenFilter()">
+          <option value="ALL">Todos los usuarios</option>
+        </select>
+        <select id="filterSelectStatus" style="background:#FFFFFF; border:1px solid #CBD5E1; color:#0F172A; padding:9px 12px; border-radius:7px; font-size:13px;" onchange="applyTokenFilter()">
+          <option value="ALL">Todos los estados</option>
+          <option value="ACTIVE">Activos (1/2 o 2/2)</option>
+          <option value="FULL">Cupo lleno (2/2 equipos)</option>
+          <option value="AVAILABLE">Disponibles (0/2 equipos)</option>
+        </select>
+      </div>
+
       <div id="tokenMsg" style="margin-bottom:10px; font-size:12.5px;"></div>
 
       <div class="table-card">
@@ -384,8 +402,11 @@
           <table>
             <thead>
               <tr>
+                <th>Usuario</th>
                 <th>Token</th>
-                <th>Dispositivo Vinculado</th>
+                <th>Uso (2 Equipos)</th>
+                <th>Dispositivo 1</th>
+                <th>Dispositivo 2</th>
                 <th>Estado</th>
                 <th style="text-align:right;">Acciones</th>
               </tr>
@@ -409,6 +430,7 @@
     let portalToken = localStorage.getItem("aegis_portal_token") || "";
     let allowedSites = [];
     let blacklistedSites = [];
+    let allCompanyTokens = [];
     let revealedTokens = {};
 
     async function doLogin() {
@@ -481,8 +503,10 @@
 
       allowedSites = policy.allowed_sites || [];
       blacklistedSites = policy.blacklisted_sites || [];
+      allCompanyTokens = tokens;
+      populateUserDropdown(tokens);
       renderSites();
-      renderTokens(tokens);
+      applyTokenFilter();
     }
 
     function renderSites() {
@@ -544,9 +568,54 @@
       await saveSitesToServer();
     }
 
+    function populateUserDropdown(tokens) {
+      const sel = document.getElementById("filterSelectUser");
+      const prev = sel.value || "ALL";
+      const users = Array.from(new Set(
+        tokens.map(t => t.assigned_employee_id).filter(Boolean)
+      )).sort();
+
+      sel.innerHTML = `<option value="ALL">Todos los usuarios (${users.length})</option>` +
+        users.map(u => `<option value="${u}">${u}</option>`).join("") +
+        `<option value="UNASSIGNED">Sin usuario asignado</option>`;
+
+      if ([...sel.options].some(o => o.value === prev)) {
+        sel.value = prev;
+      }
+    }
+
+    function applyTokenFilter() {
+      const q = (document.getElementById("filterSearchUser").value || "").trim().toLowerCase();
+      const userFilter = document.getElementById("filterSelectUser").value;
+      const statusFilter = document.getElementById("filterSelectStatus").value;
+
+      const filtered = allCompanyTokens.filter(t => {
+        const emp = (t.assigned_employee_id || "").toLowerCase();
+        const d1 = (t.assigned_device_id || "").toLowerCase();
+        const d2 = (t.secondary_device_id || "").toLowerCase();
+        const tok = (t.token_id || "").toLowerCase();
+        const used = Number(t.used_devices_count || 0);
+        const maxD = Number(t.max_devices || 2);
+
+        if (userFilter === "UNASSIGNED" && t.assigned_employee_id) return false;
+        if (userFilter !== "ALL" && userFilter !== "UNASSIGNED" && t.assigned_employee_id !== userFilter) return false;
+
+        if (statusFilter === "ACTIVE" && used === 0) return false;
+        if (statusFilter === "FULL" && used < maxD) return false;
+        if (statusFilter === "AVAILABLE" && used > 0) return false;
+
+        if (q && !(emp.includes(q) || d1.includes(q) || d2.includes(q) || tok.includes(q))) {
+          return false;
+        }
+        return true;
+      });
+
+      renderTokens(filtered);
+    }
+
     function toggleReveal(tokId) {
       revealedTokens[tokId] = !revealedTokens[tokId];
-      loadPortal();
+      applyTokenFilter();
     }
 
     function copyTok(tokId) {
@@ -558,28 +627,49 @@
 
     function renderTokens(tokens) {
       document.getElementById("portalTokensBody").innerHTML = tokens.map(t => {
-        const isActive = t.status === "ACTIVE";
+        const used = Number(t.used_devices_count || 0);
+        const maxD = Number(t.max_devices || 2);
+        const isActive = used > 0 || t.status === "ACTIVE";
         const pill = isActive
-          ? `<span class="pill pill-green">${SVG.checkCircle} Activo (En uso)</span>`
+          ? `<span class="pill pill-green">${SVG.checkCircle} Activo</span>`
           : `<span class="pill pill-gray">${SVG.clock} Disponible</span>`;
+
+        const usageBadge = used >= maxD
+          ? `<span class="pill pill-red" style="background:#FEF3C7;color:#B45309;">${used} / ${maxD} lleno</span>`
+          : `<span class="id-chip">${used} / ${maxD} disp.</span>`;
 
         const shown = revealedTokens[t.token_id]
           ? t.token_id
-          : t.token_id.slice(0, 12) + "••••••••••••";
+          : t.token_id.slice(0, 12) + "••••••••";
+
+        const userBadge = t.assigned_employee_id
+          ? `<strong>${t.assigned_employee_id}</strong>`
+          : `<span style="color:#94A3B8;">Sin asignar</span>`;
+
+        const dev1 = t.assigned_device_id
+          ? `<span class="id-chip">${t.assigned_device_id}</span>`
+          : `<span style="color:#CBD5E1;">Libre (Slot 1)</span>`;
+
+        const dev2 = t.secondary_device_id
+          ? `<span class="id-chip">${t.secondary_device_id}</span>`
+          : `<span style="color:#CBD5E1;">Libre (Slot 2)</span>`;
 
         return `
           <tr>
+            <td>${userBadge}</td>
             <td><span class="id-chip">${shown}</span></td>
-            <td style="color:#475569;">${t.assigned_device_id || "Sin dispositivo asignado"}</td>
+            <td>${usageBadge}</td>
+            <td>${dev1}</td>
+            <td>${dev2}</td>
             <td>${pill}</td>
-            <td style="text-align:right;">
+            <td style="text-align:right; white-space:nowrap;">
               <button class="act-btn" title="Ver / Ocultar token" onclick="toggleReveal('${t.token_id}')">${SVG.eye}</button>
               <button class="act-btn" title="Copiar token" onclick="copyTok('${t.token_id}')">${SVG.copy}</button>
               <button class="act-btn act-btn-del" title="Eliminar token" onclick="deleteMyToken('${t.token_id}')">${SVG.trash}</button>
             </td>
           </tr>
         `;
-      }).join("") || '<tr><td colspan="4" style="color:#94A3B8;">No tienes tokens generados</td></tr>';
+      }).join("") || '<tr><td colspan="7" style="color:#94A3B8;">No se encontraron tokens para este filtro</td></tr>';
     }
 
     async function deleteMyToken(tokId) {
@@ -597,16 +687,24 @@
     }
 
     async function createReplacementToken() {
+      const empVal = (document.getElementById("inpNewUserEmp").value || "").trim();
       const res = await fetch("/v1/portal/tokens", {
         method: "POST",
-        headers: { "X-Portal-Token": portalToken }
+        headers: {
+          "Content-Type": "application/json",
+          "X-Portal-Token": portalToken
+        },
+        body: JSON.stringify({
+          employee_id: empVal || null
+        })
       });
       const data = await res.json();
       const msg = document.getElementById("tokenMsg");
       if (res.ok) {
         revealedTokens[data.new_token.token_id] = true;
+        document.getElementById("inpNewUserEmp").value = "";
         msg.style.color = "#15803D";
-        msg.textContent = `Nuevo token creado: ${data.new_token.token_id}`;
+        msg.textContent = `Nuevo token creado (2 usos max.): ${data.new_token.token_id}`;
         await loadPortal();
       } else {
         msg.style.color = "#DC2626";

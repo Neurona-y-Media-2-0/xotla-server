@@ -12,8 +12,8 @@ use crate::{
     modules::enterprise::{
         dto::{
             AllocateCompanyRequest, EnterpriseClientToken, GenerateTempPasswordRequest,
-            IssueClientTokenRequest, PortalLoginRequest, RevokeTokenRequest,
-            ToggleAccountStatusRequest, UpdateCompanySitePolicyRequest,
+            IssueClientTokenRequest, PortalCreateUserTokenRequest, PortalLoginRequest,
+            RevokeTokenRequest, ToggleAccountStatusRequest, UpdateCompanySitePolicyRequest,
         },
         service::{
             create_enterprise_account_with_pool, generate_temp_password, get_enterprise_account,
@@ -140,6 +140,7 @@ pub async fn portal_delete_token_handler(
 pub async fn portal_create_token_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
+    body: Option<Json<PortalCreateUserTokenRequest>>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let cid = resolve_portal_company(&state, &headers)?;
     let account = state.db.load_enterprise_account(&cid);
@@ -157,6 +158,16 @@ pub async fn portal_create_token_handler(
         ));
     }
 
+    let emp_id = body
+        .as_ref()
+        .and_then(|b| b.employee_id.clone())
+        .filter(|s| !s.trim().is_empty());
+    let label = body
+        .as_ref()
+        .and_then(|b| b.client_label.clone())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("Licencia #{}", current_count + 1));
+
     let seed = format!("{}:regen:{}", cid, Uuid::new_v4());
     let tok_sha = sha256_hex(&seed);
     let tok_id = format!("aegis_tok_{}", &tok_sha[..16]);
@@ -167,8 +178,11 @@ pub async fn portal_create_token_handler(
         company_id: cid.clone(),
         token_sha256: tok_sha,
         assigned_device_id: None,
-        assigned_employee_id: None,
-        client_label: format!("Licencia #{}", current_count + 1),
+        secondary_device_id: None,
+        assigned_employee_id: emp_id,
+        max_devices: 2,
+        used_devices_count: 0,
+        client_label: label,
         platform: "UNASSIGNED".to_string(),
         status: "AVAILABLE".to_string(),
         activated_at: now.clone(),

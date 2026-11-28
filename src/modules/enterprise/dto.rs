@@ -21,7 +21,10 @@ pub struct EnterpriseClientToken {
     pub company_id: String,
     pub token_sha256: String,
     pub assigned_device_id: Option<String>,
+    pub secondary_device_id: Option<String>,
     pub assigned_employee_id: Option<String>,
+    pub max_devices: u32,
+    pub used_devices_count: u32,
     pub client_label: String,
     pub platform: String,
     pub status: String,
@@ -83,4 +86,10 @@ pub struct CompanySitePolicy {
 pub struct UpdateCompanySitePolicyRequest {
     pub allowed_sites: Vec<String>,
     pub blacklisted_sites: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PortalCreateUserTokenRequest {
+    pub employee_id: Option<String>,
+    pub client_label: Option<String>,
 }
