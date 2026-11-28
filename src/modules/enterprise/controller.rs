@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::Html,
     Json,
@@ -9,7 +9,7 @@ use crate::{
     modules::enterprise::{
         dto::{
             AllocateCompanyRequest, GenerateTempPasswordRequest, IssueClientTokenRequest,
-            RevokeTokenRequest,
+            RevokeTokenRequest, ToggleAccountStatusRequest,
         },
         service::{
             create_enterprise_account_with_pool, generate_temp_password, get_enterprise_account,
@@ -50,6 +50,71 @@ pub async fn create_enterprise_account_handler(
         "enterprise_account": acc,
         "temp_password": plain_pw,
         "generated_tokens": tokens
+    }))
+}
+
+pub async fn edit_enterprise_account_handler(
+    State(state): State<AppState>,
+    Path(company_id): Path<String>,
+    Json(mut req): Json<AllocateCompanyRequest>,
+) -> Json<Value> {
+    req.company_id = Some(company_id);
+    let has_new_pw = req
+        .temp_password
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+
+    if has_new_pw {
+        let (acc, plain_pw, tokens) = create_enterprise_account_with_pool(&state, req);
+        return Json(json!({
+            "status": "ACCOUNT_UPDATED",
+            "enterprise_account": acc,
+            "temp_password": plain_pw,
+            "client_tokens": tokens
+        }));
+    }
+
+    let updated = update_company_quota(&state, req);
+    let tokens = state.db.load_enterprise_tokens(&updated.company_id);
+    Json(json!({
+        "status": "ACCOUNT_UPDATED",
+        "enterprise_account": updated,
+        "client_tokens": tokens
+    }))
+}
+
+pub async fn toggle_enterprise_status_handler(
+    State(state): State<AppState>,
+    Path(company_id): Path<String>,
+    Json(req): Json<ToggleAccountStatusRequest>,
+) -> Json<Value> {
+    let current = state.db.load_enterprise_account(&company_id);
+    let next_status = req.status.unwrap_or_else(|| {
+        if current.account_status == "ACTIVE" {
+            "DISABLED".to_string()
+        } else {
+            "ACTIVE".to_string()
+        }
+    });
+    state
+        .db
+        .set_enterprise_account_status(&company_id, &next_status);
+    let updated = state.db.load_enterprise_account(&company_id);
+    Json(json!({
+        "status": "ACCOUNT_STATUS_CHANGED",
+        "enterprise_account": updated
+    }))
+}
+
+pub async fn delete_enterprise_account_handler(
+    State(state): State<AppState>,
+    Path(company_id): Path<String>,
+) -> Json<Value> {
+    state.db.delete_enterprise_account(&company_id);
+    Json(json!({
+        "status": "ACCOUNT_DELETED",
+        "deleted_company_id": company_id
     }))
 }
 

@@ -33,7 +33,7 @@
     }
     .nav-btn.active { background: #1f6feb; color: #fff; }
     .nav-btn:hover:not(.active) { background: #192030; color: #fff; }
-    .container { max-width: 1020px; margin: 28px auto; padding: 0 20px 60px; }
+    .container { max-width: 1120px; margin: 28px auto; padding: 0 20px 60px; }
     .card {
       background: #121722;
       border: 1px solid #21293a;
@@ -46,12 +46,12 @@
     .sub { font-size: 13px; color: #8b949e; margin-bottom: 16px; }
     .form-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
       gap: 12px;
       align-items: end;
     }
     label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 5px; }
-    input, select {
+    input {
       width: 100%;
       background: #0b0e14;
       border: 1px solid #263044;
@@ -72,15 +72,27 @@
       width: 100%;
     }
     .btn:hover { background: #388bfd; }
-    table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: left; }
+    .btn-sm {
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .btn-edit { background: #1f6feb22; color: #58a6ff; border-color: #388bfd66; }
+    .btn-warn { background: #d2992222; color: #e3b341; border-color: #d2992266; }
+    .btn-del { background: #f8514922; color: #ff7b72; border-color: #f8514966; }
+    .actions-cell { display: flex; gap: 6px; flex-wrap: nowrap; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
     th {
       color: #8b949e;
-      font-size: 11.5px;
+      font-size: 11px;
       text-transform: uppercase;
       padding: 10px 12px;
       border-bottom: 1px solid #21293a;
     }
-    td { padding: 12px; border-bottom: 1px solid #192030; overflow-wrap: anywhere; }
+    td { padding: 12px; border-bottom: 1px solid #192030; overflow-wrap: anywhere; vertical-align: middle; }
     .mono {
       font-family: monospace;
       font-size: 12px;
@@ -108,6 +120,15 @@
       font-size: 11px;
       font-weight: 700;
     }
+    .badge-disabled {
+      background: #f8514922;
+      color: #ff7b72;
+      border: 1px solid #f8514966;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
     .result-box {
       display: none;
       margin-top: 16px;
@@ -129,10 +150,11 @@
   </nav>
 
   <main class="container">
-    <!-- 1. Crear Cuenta de Empresa con Contrasena Temporal y Pool de Tokens -->
+    <!-- 1. Crear o Editar Cuenta de Empresa -->
     <section class="card">
-      <h2>Crear Cuenta de Empresa</h2>
-      <div class="sub">Crea la cuenta unica de la empresa, su contrasena temporal (cifrada SHA-256 en BD) y genera su lote de tokens listos para usarse.</div>
+      <h2 id="formTitle">Crear Cuenta de Empresa</h2>
+      <div class="sub" id="formSub">Crea la cuenta unica de la empresa, su contrasena temporal (cifrada SHA-256 en BD) y genera su lote de tokens listos para usarse.</div>
+      <input type="hidden" id="editingCompanyId" value="" />
 
       <div class="form-grid">
         <div>
@@ -148,11 +170,12 @@
           <input type="number" id="inpCount" value="10" min="1" max="200" />
         </div>
         <div>
-          <label>Contrasena Temporal (vacio = autogenerar)</label>
+          <label>Contrasena Temporal (vacio = conservar/autogenerar)</label>
           <input type="text" id="inpTempPw" placeholder="Ej. bloque12345" />
         </div>
-        <div>
-          <button class="btn" onclick="createAccount()">Crear Cuenta con Tokens</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="btnSubmitForm" onclick="submitAccountForm()">Crear Cuenta con Tokens</button>
+          <button class="btn" id="btnCancelEdit" style="display:none; background:#30363d; width:auto;" onclick="cancelEdit()">Cancelar</button>
         </div>
       </div>
 
@@ -168,17 +191,19 @@
             <th>ID Cuenta</th>
             <th>Empresa</th>
             <th>Correo</th>
-            <th>Tokens Totales</th>
+            <th>Estado</th>
+            <th>Tokens</th>
             <th>En Uso</th>
             <th>Disponibles</th>
-            <th>Contrasena Temporal</th>
+            <th>Contrasena</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody id="accountsBody"></tbody>
       </table>
     </section>
 
-    <!-- 3. Pool de Tokens de las Cuentas (sin asignacion manual) -->
+    <!-- 3. Pool de Tokens de las Cuentas -->
     <section class="card">
       <h2>Tokens Generados de la Cuenta (Pool en Base de Datos)</h2>
       <table>
@@ -195,34 +220,76 @@
   </main>
 
   <script>
+    let cachedAccounts = [];
+
     async function loadData() {
       const res = await fetch("/v1/enterprise");
       const data = await res.json();
-      const accounts = data.accounts || [];
+      cachedAccounts = data.accounts || [];
       const tokens = data.client_tokens || [];
 
-      document.getElementById("accountsBody").innerHTML = accounts.map(a => `
-        <tr>
-          <td><span class="mono">${a.company_id}</span></td>
-          <td><strong>${a.company_name}</strong></td>
-          <td>${a.master_account_email}</td>
-          <td><strong>${a.total_allocated_tokens}</strong></td>
-          <td style="color:#3fb950;"><strong>${a.active_tokens_used}</strong></td>
-          <td style="color:#58a6ff;"><strong>${a.available_tokens}</strong></td>
-          <td>${a.has_temp_password ? '<span class="badge-active">SHA-256 Guardada</span>' : '<span style="color:#8b949e;">Sin definir</span>'}</td>
-        </tr>
-      `).join("") || '<tr><td colspan="7" style="color:#8b949e;">Sin cuentas</td></tr>';
+      document.getElementById("accountsBody").innerHTML = cachedAccounts.map(a => {
+        const isActive = a.account_status === "ACTIVE";
+        return `
+          <tr>
+            <td><span class="mono">${a.company_id}</span></td>
+            <td><strong>${a.company_name}</strong></td>
+            <td>${a.master_account_email}</td>
+            <td><span class="${isActive ? 'badge-active' : 'badge-disabled'}">${isActive ? 'ACTIVA' : 'INHABILITADA'}</span></td>
+            <td><strong>${a.total_allocated_tokens}</strong></td>
+            <td style="color:#3fb950;"><strong>${a.active_tokens_used}</strong></td>
+            <td style="color:#58a6ff;"><strong>${a.available_tokens}</strong></td>
+            <td>${a.has_temp_password ? '<span class="badge-active">SHA-256</span>' : '<span style="color:#8b949e;">-</span>'}</td>
+            <td>
+              <div class="actions-cell">
+                <button class="btn-sm btn-edit" onclick="startEdit('${a.company_id}')">Editar</button>
+                <button class="btn-sm btn-warn" onclick="toggleStatus('${a.company_id}', '${isActive ? 'DISABLED' : 'ACTIVE'}')">${isActive ? 'Inhabilitar' : 'Habilitar'}</button>
+                <button class="btn-sm btn-del" onclick="deleteAccount('${a.company_id}')">Eliminar</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("") || '<tr><td colspan="9" style="color:#8b949e;">Sin cuentas registradas</td></tr>';
 
-      document.getElementById("tokensBody").innerHTML = tokens.map(t => `
-        <tr>
-          <td><span class="mono">${t.company_id}</span></td>
-          <td><span class="mono">${t.token_id}</span></td>
-          <td><span class="${t.status === 'ACTIVE' ? 'badge-active' : 'badge-avail'}">${t.status}</span></td>
-        </tr>
-      `).join("") || '<tr><td colspan="3" style="color:#8b949e;">Sin tokens</td></tr>';
+      document.getElementById("tokensBody").innerHTML = tokens.map(t => {
+        const cls = t.status === "ACTIVE" ? "badge-active" : (t.status === "AVAILABLE" ? "badge-avail" : "badge-disabled");
+        return `
+          <tr>
+            <td><span class="mono">${t.company_id}</span></td>
+            <td><span class="mono">${t.token_id}</span></td>
+            <td><span class="${cls}">${t.status}</span></td>
+          </tr>
+        `;
+      }).join("") || '<tr><td colspan="3" style="color:#8b949e;">Sin tokens</td></tr>';
     }
 
-    async function createAccount() {
+    function startEdit(companyId) {
+      const acc = cachedAccounts.find(x => x.company_id === companyId);
+      if (!acc) return;
+      document.getElementById("editingCompanyId").value = acc.company_id;
+      document.getElementById("inpName").value = acc.company_name;
+      document.getElementById("inpEmail").value = acc.master_account_email;
+      document.getElementById("inpCount").value = acc.total_allocated_tokens;
+      document.getElementById("inpTempPw").value = "";
+      document.getElementById("formTitle").textContent = "Editar Cuenta: " + acc.company_name;
+      document.getElementById("btnSubmitForm").textContent = "Guardar Cambios";
+      document.getElementById("btnCancelEdit").style.display = "inline-block";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function cancelEdit() {
+      document.getElementById("editingCompanyId").value = "";
+      document.getElementById("inpName").value = "";
+      document.getElementById("inpEmail").value = "";
+      document.getElementById("inpCount").value = "10";
+      document.getElementById("inpTempPw").value = "";
+      document.getElementById("formTitle").textContent = "Crear Cuenta de Empresa";
+      document.getElementById("btnSubmitForm").textContent = "Crear Cuenta con Tokens";
+      document.getElementById("btnCancelEdit").style.display = "none";
+    }
+
+    async function submitAccountForm() {
+      const editId = document.getElementById("editingCompanyId").value.trim();
       const name = document.getElementById("inpName").value.trim();
       const email = document.getElementById("inpEmail").value.trim();
       const count = Number(document.getElementById("inpCount").value || 10);
@@ -233,8 +300,11 @@
         return;
       }
 
-      const res = await fetch("/v1/enterprise/accounts", {
-        method: "POST",
+      const url = editId ? `/v1/enterprise/accounts/${editId}` : "/v1/enterprise/accounts";
+      const method = editId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           company_name: name,
@@ -249,19 +319,35 @@
       if (res.ok) {
         const box = document.getElementById("createdResult");
         box.style.display = "block";
+        const pwNote = data.temp_password
+          ? ` · Contrasena Temporal: <span class="mono" style="color:#fff;font-weight:700;">${data.temp_password}</span>`
+          : "";
         box.innerHTML = `
-          <div style="color:#3fb950; font-weight:700;">[OK] Cuenta creada en SQLite con ${count} tokens generados</div>
+          <div style="color:#3fb950; font-weight:700;">[OK] ${editId ? "Cuenta actualizada" : "Cuenta creada"} en SQLite</div>
           <div style="margin-top:6px;">
             Cuenta ID: <span class="mono">${data.enterprise_account.company_id}</span> ·
             Correo: <strong>${data.enterprise_account.master_account_email}</strong> ·
-            Contrasena Temporal: <span class="mono" style="color:#fff;font-weight:700;">${data.temp_password}</span>
+            Tokens: <strong>${data.enterprise_account.total_allocated_tokens}</strong>${pwNote}
           </div>
         `;
-        document.getElementById("inpName").value = "";
-        document.getElementById("inpEmail").value = "";
-        document.getElementById("inpTempPw").value = "";
+        cancelEdit();
         loadData();
       }
+    }
+
+    async function toggleStatus(companyId, nextStatus) {
+      await fetch(`/v1/enterprise/accounts/${companyId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus })
+      });
+      loadData();
+    }
+
+    async function deleteAccount(companyId) {
+      if (!confirm("Seguro que deseas eliminar esta cuenta y todos sus tokens de la base de datos?")) return;
+      await fetch(`/v1/enterprise/accounts/${companyId}`, { method: "DELETE" });
+      loadData();
     }
 
     loadData();

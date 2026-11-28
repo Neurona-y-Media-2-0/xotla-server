@@ -199,6 +199,37 @@ impl Database {
         })
     }
 
+    pub fn set_enterprise_account_status(&self, company_id: &str, status: &str) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "UPDATE enterprise_accounts SET account_status = ?1 WHERE company_id = ?2",
+            params![status, company_id],
+        );
+        if status == "DISABLED" {
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens SET status = 'SUSPENDED' WHERE company_id = ?1 AND status != 'REVOKED'",
+                params![company_id],
+            );
+        } else if status == "ACTIVE" {
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens SET status = CASE WHEN assigned_device_id IS NOT NULL THEN 'ACTIVE' ELSE 'AVAILABLE' END WHERE company_id = ?1 AND status = 'SUSPENDED'",
+                params![company_id],
+            );
+        }
+    }
+
+    pub fn delete_enterprise_account(&self, company_id: &str) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "DELETE FROM enterprise_client_tokens WHERE company_id = ?1",
+            params![company_id],
+        );
+        let _ = conn.execute(
+            "DELETE FROM enterprise_accounts WHERE company_id = ?1",
+            params![company_id],
+        );
+    }
+
     pub fn set_enterprise_temp_password(
         &self,
         company_id: &str,

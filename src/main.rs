@@ -9,7 +9,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::IntoResponse,
-    routing::{get, head, post, put},
+    routing::{delete, get, head, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -19,10 +19,11 @@ use crate::{
     modules::{
         devices::controller::{handshake_handler, list_devices_handler},
         enterprise::controller::{
-            create_enterprise_account_handler, enterprise_admin_page_handler,
+            create_enterprise_account_handler, delete_enterprise_account_handler,
+            edit_enterprise_account_handler, enterprise_admin_page_handler,
             generate_temp_password_handler, get_enterprise_overview_handler,
             issue_enterprise_token_handler, revoke_enterprise_token_handler,
-            update_enterprise_quota_handler,
+            toggle_enterprise_status_handler, update_enterprise_quota_handler,
         },
         phishing_ai::controller::analyze_phishing_handler,
         policy::controller::{
@@ -114,6 +115,14 @@ async fn main() {
             get(get_enterprise_overview_handler).post(create_enterprise_account_handler),
         )
         .route("/v1/enterprise/accounts", post(create_enterprise_account_handler))
+        .route(
+            "/v1/enterprise/accounts/:company_id",
+            put(edit_enterprise_account_handler).delete(delete_enterprise_account_handler),
+        )
+        .route(
+            "/v1/enterprise/accounts/:company_id/status",
+            post(toggle_enterprise_status_handler),
+        )
         .route("/v1/enterprise/quota", put(update_enterprise_quota_handler))
         .route(
             "/v1/enterprise/temp-password",
