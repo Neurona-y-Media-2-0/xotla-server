@@ -715,6 +715,11 @@
     if (portalToken) {
       loadPortal();
     }
+    setInterval(() => {
+      if (portalToken) {
+        loadPortal();
+      }
+    }, 5000);
   </script>
 </body>
 </html>

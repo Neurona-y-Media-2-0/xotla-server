@@ -49,6 +49,10 @@ pub struct AdminLoginRequest {
     #[serde(alias = "username")]
     pub usuario: String,
     pub password: String,
+    pub device_id: Option<String>,
+    pub employee_id: Option<String>,
+    pub client_label: Option<String>,
+    pub platform: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

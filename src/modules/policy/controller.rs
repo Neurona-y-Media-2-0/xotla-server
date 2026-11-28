@@ -44,11 +44,30 @@ pub async fn admin_login_handler(
             .into_response();
     };
 
+    let emp_id = req
+        .employee_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("General");
+    let platform = req
+        .platform
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("browser");
+    let label = req
+        .client_label
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("Extension ({})", account.master_account_email));
+
     let claimed_token = state.db.activate_available_company_token(
         &account.company_id,
-        "General",
-        &format!("Extension ({})", account.master_account_email),
-        "browser",
+        emp_id,
+        &label,
+        platform,
+        req.device_id.as_deref(),
     );
 
     let (session_id, csrf_token) = create_admin_session(&state, &req.usuario);

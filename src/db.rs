@@ -395,36 +395,187 @@ impl Database {
         Some(self.load_enterprise_account(&company_id))
     }
 
+    pub fn find_enterprise_token_by_id(&self, token_id: &str) -> Option<EnterpriseClientToken> {
+        let conn = self.connect();
+        conn.query_row(
+            "SELECT token_id, company_id, token_sha256, assigned_device_id,
+                    assigned_employee_id, client_label, platform, status,
+                    activated_at, last_used_at, secondary_device_id, max_devices
+             FROM enterprise_client_tokens
+             WHERE token_id = ?1",
+            params![token_id.trim()],
+            |row| {
+                let d1: Option<String> = row.get(3)?;
+                let d2: Option<String> = row.get(10).ok().flatten();
+                let max_dev: u32 = row.get(11).unwrap_or(2);
+                let used = u32::from(d1.is_some()) + u32::from(d2.is_some());
+                Ok(EnterpriseClientToken {
+                    token_id: row.get(0)?,
+                    company_id: row.get(1)?,
+                    token_sha256: row.get(2)?,
+                    assigned_device_id: d1,
+                    secondary_device_id: d2,
+                    assigned_employee_id: row.get(4)?,
+                    max_devices: max_dev,
+                    used_devices_count: used,
+                    client_label: row.get(5)?,
+                    platform: row.get(6)?,
+                    status: row.get(7)?,
+                    activated_at: row.get(8)?,
+                    last_used_at: row.get(9)?,
+                })
+            },
+        )
+        .ok()
+    }
+
+    pub fn bind_device_to_specific_token(
+        &self,
+        token_id: &str,
+        device_id: &str,
+        employee_id: Option<&str>,
+        client_label: Option<&str>,
+        platform: &str,
+    ) -> Result<EnterpriseClientToken, String> {
+        let Some(tok) = self.find_enterprise_token_by_id(token_id) else {
+            return Err("Token no encontrado en el servidor".to_string());
+        };
+        if tok.status == "REVOKED" || tok.status == "SUSPENDED" {
+            return Err("Este token fue revocado o suspendido".to_string());
+        }
+
+        let conn = self.connect();
+        let now = Utc::now().to_rfc3339();
+        let clean_emp = employee_id
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && *s != "General");
+        let next_emp = match tok.assigned_employee_id.as_deref() {
+            Some(existing) if !existing.is_empty() && existing != "General" => Some(existing.to_string()),
+            _ => clean_emp.map(str::to_string).or(tok.assigned_employee_id.clone()),
+        };
+
+        if tok.assigned_device_id.as_deref() == Some(device_id)
+            || tok.secondary_device_id.as_deref() == Some(device_id)
+        {
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens
+                 SET status = 'ACTIVE', last_used_at = ?1,
+                     assigned_employee_id = COALESCE(?2, assigned_employee_id)
+                 WHERE token_id = ?3",
+                params![now, next_emp, tok.token_id],
+            );
+            return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
+        }
+
+        if tok.assigned_device_id.is_none() {
+            let next_plat = if tok.platform == "UNASSIGNED" || tok.platform.is_empty() {
+                platform.to_string()
+            } else if tok.platform == platform {
+                tok.platform.clone()
+            } else {
+                format!("{} + {}", tok.platform, platform)
+            };
+            let next_label = client_label
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&tok.client_label);
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens
+                 SET assigned_device_id = ?1,
+                     assigned_employee_id = ?2,
+                     client_label = ?3,
+                     platform = ?4,
+                     status = 'ACTIVE',
+                     last_used_at = ?5
+                 WHERE token_id = ?6",
+                params![device_id, next_emp, next_label, next_plat, now, tok.token_id],
+            );
+            return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
+        }
+
+        if tok.secondary_device_id.is_none() {
+            let next_plat = if tok.platform == "UNASSIGNED" || tok.platform.is_empty() {
+                platform.to_string()
+            } else if tok.platform == platform || tok.platform.contains(platform) {
+                tok.platform.clone()
+            } else {
+                format!("{} + {}", tok.platform, platform)
+            };
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens
+                 SET secondary_device_id = ?1,
+                     assigned_employee_id = COALESCE(?2, assigned_employee_id),
+                     platform = ?3,
+                     status = 'ACTIVE',
+                     last_used_at = ?4
+                 WHERE token_id = ?5",
+                params![device_id, next_emp, next_plat, now, tok.token_id],
+            );
+            return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
+        }
+
+        Err(format!(
+            "Este token ya tiene sus {} dispositivos ocupados ({} y {})",
+            tok.max_devices,
+            tok.assigned_device_id.as_deref().unwrap_or("-"),
+            tok.secondary_device_id.as_deref().unwrap_or("-")
+        ))
+    }
+
     pub fn activate_available_company_token(
         &self,
         company_id: &str,
         employee_id: &str,
         client_label: &str,
         platform: &str,
+        device_id: Option<&str>,
     ) -> Option<EnterpriseClientToken> {
+        if let Some(dev_id) = device_id {
+            if let Some(existing) = self.find_token_by_device(company_id, dev_id) {
+                self.touch_device_token(company_id, dev_id);
+                return Some(existing);
+            }
+        }
+
         let conn = self.connect();
-        let tok_id: Option<String> = conn
+        let candidate_id: Option<String> = conn
             .query_row(
                 "SELECT token_id FROM enterprise_client_tokens
-                 WHERE company_id = ?1 AND status = 'AVAILABLE'
-                 ORDER BY activated_at ASC LIMIT 1",
+                 WHERE company_id = ?1
+                   AND status IN ('AVAILABLE', 'ACTIVE')
+                   AND (assigned_device_id IS NULL OR secondary_device_id IS NULL)
+                 ORDER BY CASE WHEN status = 'AVAILABLE' THEN 0 ELSE 1 END, activated_at ASC
+                 LIMIT 1",
                 params![company_id],
                 |r| r.get(0),
             )
             .ok();
 
-        if let Some(tid) = tok_id {
-            let now = Utc::now().to_rfc3339();
-            let _ = conn.execute(
-                "UPDATE enterprise_client_tokens
-                 SET status = 'ACTIVE',
-                     assigned_employee_id = ?1,
-                     client_label = ?2,
-                     platform = ?3,
-                     last_used_at = ?4
-                 WHERE token_id = ?5",
-                params![employee_id, client_label, platform, now, tid],
-            );
+        if let Some(tid) = candidate_id {
+            if let Some(dev_id) = device_id {
+                if let Ok(bound) = self.bind_device_to_specific_token(
+                    &tid,
+                    dev_id,
+                    Some(employee_id),
+                    Some(client_label),
+                    platform,
+                ) {
+                    return Some(bound);
+                }
+            } else {
+                let now = Utc::now().to_rfc3339();
+                let _ = conn.execute(
+                    "UPDATE enterprise_client_tokens
+                     SET status = 'ACTIVE',
+                         assigned_employee_id = COALESCE(assigned_employee_id, ?1),
+                         client_label = ?2,
+                         platform = ?3,
+                         last_used_at = ?4
+                     WHERE token_id = ?5",
+                    params![employee_id, client_label, platform, now, tid],
+                );
+                return self.find_enterprise_token_by_id(&tid);
+            }
         }
 
         self.load_enterprise_tokens(company_id)

@@ -64,6 +64,15 @@ pub struct RevokeTokenRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct BindTokenRequest {
+    pub token_id: String,
+    pub device_id: String,
+    pub employee_id: Option<String>,
+    pub client_label: Option<String>,
+    pub platform: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ToggleAccountStatusRequest {
     pub status: Option<String>,
 }

@@ -11,9 +11,10 @@ use crate::{
     db::sha256_hex,
     modules::enterprise::{
         dto::{
-            AllocateCompanyRequest, EnterpriseClientToken, GenerateTempPasswordRequest,
-            IssueClientTokenRequest, PortalCreateUserTokenRequest, PortalLoginRequest,
-            RevokeTokenRequest, ToggleAccountStatusRequest, UpdateCompanySitePolicyRequest,
+            AllocateCompanyRequest, BindTokenRequest, EnterpriseClientToken,
+            GenerateTempPasswordRequest, IssueClientTokenRequest, PortalCreateUserTokenRequest,
+            PortalLoginRequest, RevokeTokenRequest, ToggleAccountStatusRequest,
+            UpdateCompanySitePolicyRequest,
         },
         service::{
             create_enterprise_account_with_pool, generate_temp_password, get_enterprise_account,
@@ -387,6 +388,36 @@ pub async fn generate_temp_password_handler(
         "expires_at": expires_at,
         "enterprise_account": account
     }))
+}
+
+pub async fn bind_enterprise_token_handler(
+    State(state): State<AppState>,
+    Json(req): Json<BindTokenRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let platform = req.platform.as_deref().unwrap_or("browser");
+    match state.db.bind_device_to_specific_token(
+        &req.token_id,
+        &req.device_id,
+        req.employee_id.as_deref(),
+        req.client_label.as_deref(),
+        platform,
+    ) {
+        Ok(tok) => {
+            let acc = state.db.load_enterprise_account(&tok.company_id);
+            Ok(Json(json!({
+                "status": "TOKEN_BOUND",
+                "token": tok,
+                "enterprise_account": acc
+            })))
+        }
+        Err(msg) => Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "status": "TOKEN_BIND_REJECTED",
+                "error": msg
+            })),
+        )),
+    }
 }
 
 pub async fn revoke_enterprise_token_handler(

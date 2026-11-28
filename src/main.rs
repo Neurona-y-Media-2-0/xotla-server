@@ -19,14 +19,14 @@ use crate::{
     modules::{
         devices::controller::{handshake_handler, list_devices_handler},
         enterprise::controller::{
-            company_portal_page_handler, create_enterprise_account_handler,
-            delete_enterprise_account_handler, edit_enterprise_account_handler,
-            enterprise_admin_page_handler, generate_temp_password_handler,
-            get_enterprise_overview_handler, issue_enterprise_token_handler,
-            portal_create_token_handler, portal_delete_token_handler, portal_login_handler,
-            portal_logout_handler, portal_me_handler, portal_update_sites_handler,
-            revoke_enterprise_token_handler, toggle_enterprise_status_handler,
-            update_enterprise_quota_handler,
+            bind_enterprise_token_handler, company_portal_page_handler,
+            create_enterprise_account_handler, delete_enterprise_account_handler,
+            edit_enterprise_account_handler, enterprise_admin_page_handler,
+            generate_temp_password_handler, get_enterprise_overview_handler,
+            issue_enterprise_token_handler, portal_create_token_handler,
+            portal_delete_token_handler, portal_login_handler, portal_logout_handler,
+            portal_me_handler, portal_update_sites_handler, revoke_enterprise_token_handler,
+            toggle_enterprise_status_handler, update_enterprise_quota_handler,
         },
         phishing_ai::controller::analyze_phishing_handler,
         policy::controller::{
@@ -132,6 +132,7 @@ async fn main() {
             post(generate_temp_password_handler),
         )
         .route("/v1/enterprise/tokens/issue", post(issue_enterprise_token_handler))
+        .route("/v1/enterprise/tokens/bind", post(bind_enterprise_token_handler))
         .route("/v1/enterprise/tokens/revoke", post(revoke_enterprise_token_handler))
         .route("/v1/ws", get(ws_handler))
         .route("/v1/telemetry/browser", post(browser_telemetry_handler))
