@@ -152,6 +152,84 @@
       return d.toLocaleTimeString("es-MX", { hour12: false }) + " (" + d.toLocaleDateString("es-MX") + ")";
     }
 
+    const PERM_NAMES = {
+      RECEIVE_SMS: "Lee SMS entrantes (roba codigos de verificacion)",
+      READ_SMS: "Lee los SMS guardados",
+      BIND_ACCESSIBILITY_SERVICE: "Servicio de Accesibilidad (puede controlar la pantalla)",
+      SYSTEM_ALERT_WINDOW: "Dibuja ventanas encima de otras apps (phishing en pantalla)",
+      REQUEST_INSTALL_PACKAGES: "Puede instalar otras apps sin permiso"
+    };
+
+    function humanizeReasons(reasons) {
+      const out = [];
+      const add = (t) => { if (t && !out.includes(t)) out.push(t); };
+
+      (reasons || []).forEach((raw) => {
+        const r = String(raw || "");
+        let matched = false;
+
+        const llm = r.match(/^\[LLM[^\]]*\]\s*(.*)$/i);
+        if (llm) {
+          const t = llm[1].trim();
+          if (t.length >= 40 && !/aqu[ií] tienes|mensaje en espa|respectivamente/i.test(t)) {
+            add("IA: " + (t.length > 170 ? t.slice(0, 170) + "..." : t));
+          }
+          return;
+        }
+
+        const rob = r.match(/RoBERTa[^\]]*\]\s*(\w+).*?\(([\d.]+)%\)/i);
+        if (rob) {
+          add("RoBERTa: " + (/PHISH/i.test(rob[1]) ? "Phishing" : "Seguro") + " (" + rob[2] + "%)");
+          return;
+        }
+        const hor = r.match(/Horizon[^\]]*\]\s*(\w+).*?\(([\d.]+)%\)/i);
+        if (hor) {
+          const lbl = { fraud: "Fraude", spam: "Spam", legitimate: "Legitimo" }[hor[1]] || hor[1];
+          add("Horizon-Labs: " + lbl + " (" + hor[2] + "%)");
+          return;
+        }
+
+        const perms = r.match(/permission\.[A-Z_]+/g);
+        if (perms) {
+          matched = true;
+          perms.forEach((p) => {
+            const key = p.replace("permission.", "");
+            add("Permiso peligroso: " + (PERM_NAMES[key] || key));
+          });
+        }
+
+        const doms = r.match(/(?:[a-z0-9-]+\.)*xn--[a-z0-9-]+(?:\.[a-z0-9-]+)*/gi);
+        if (doms) {
+          matched = true;
+          Array.from(new Set(doms)).forEach((d) => add("Dominio falso (punycode): " + d));
+        }
+
+        if (/\/JS/.test(r)) { matched = true; add("PDF con JavaScript incrustado"); }
+        if (/OpenAction/i.test(r)) { matched = true; add("PDF que ejecuta una accion solo al abrirse (/OpenAction)"); }
+        if (/MIME spoofing/i.test(r)) { matched = true; add("El archivo dice ser un tipo pero por dentro es otro (MIME falso)"); }
+        if (/Magic Bytes/i.test(r)) { matched = true; add("Imagen falsa: por dentro es un ejecutable"); }
+        if (/powershell/i.test(r)) { matched = true; add("Contiene comandos PowerShell ocultos"); }
+
+        const ck = r.match(/caracteres Cookie \((.*?)\)/i);
+        if (ck) {
+          matched = true;
+          let host = ck[1];
+          try { host = new URL(ck[1]).hostname.replace(/^\./, ""); } catch (e) {}
+          add("Cookie de sesion sin proteccion en " + host);
+        }
+
+        if (!matched) {
+          const t = r.replace(/\s+/g, " ").trim();
+          if (t && !/^Dominios\/IPs en DEX/i.test(t) && !/^Inspeccion estatica/i.test(t)) {
+            add(t.length > 150 ? t.slice(0, 150) + "..." : t);
+          }
+        }
+      });
+
+      if (out.length === 0) out.push("Sin amenazas encontradas");
+      return out;
+    }
+
     async function loadIncoming() {
       const [artsRes, profRes] = await Promise.all([
         fetch("/v1/scanner/artifacts"),
@@ -173,7 +251,7 @@
           <td><span class="${bClass(a.verdict)}">${a.verdict} (${Number(a.threat_score).toFixed(2)})</span></td>
           <td>
             <ul>
-              ${(a.detection_reasons || []).map(r => `<li>${r}</li>`).join("")}
+              ${humanizeReasons(a.detection_reasons).map(r => `<li>${r}</li>`).join("")}
             </ul>
           </td>
           <td><span class="mono" title="${a.artifact_sha256}">${(a.artifact_sha256 || "").slice(0, 12)}...</span></td>
