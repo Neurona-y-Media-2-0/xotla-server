@@ -487,6 +487,70 @@
     .act-btn-del:hover { background: #FEE2E2; color: #DC2626; }
     .act-btn svg { width: 15px; height: 15px; }
 
+    /* Device Choice Cards */
+    .dev-choice-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border: 1px solid #CBD5E1;
+      border-radius: 10px;
+      background: #FFFFFF;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      width: 100%;
+      transition: all 0.15s ease;
+    }
+    .dev-choice-card:hover {
+      background: #F8FAFC;
+      border-color: #0F172A;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+    .dev-choice-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: #EDF3FB;
+      color: #0F172A;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .dev-choice-icon svg { width: 18px; height: 18px; }
+    .dev-choice-info { flex: 1; min-width: 0; }
+    .dev-choice-title { font-size: 13.5px; font-weight: 700; color: #0F172A; }
+    .dev-choice-sub { font-size: 11.5px; color: #64748B; margin-top: 2px; }
+
+    /* Device Filter Tabs */
+    .dev-tab-btn {
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: #64748B;
+      cursor: pointer;
+      font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .dev-tab-btn:hover {
+      color: #0F172A;
+      background: rgba(255, 255, 255, 0.6);
+    }
+    .dev-tab-btn.active {
+      background: #FFFFFF;
+      color: #0F172A;
+      border-color: #CBD5E1;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
     /* Device Card Cell */
     .dev-card-cell {
       display: flex;
@@ -917,6 +981,20 @@
       </div>
     </section>
   </main>
+
+  <!-- Modal selector de dispositivo para reporte -->
+  <div id="deviceSelectModal" style="display:none; position:fixed; inset:0; z-index:1100; background:rgba(15,23,42,0.6); align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#FFFFFF; border-radius:14px; max-width:540px; width:100%; box-shadow:0 25px 60px rgba(0,0,0,0.3); overflow:hidden;">
+      <div style="padding:18px 22px; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center; background:#F8FAFC;">
+        <div>
+          <h3 style="margin:0; font-size:16px; font-weight:700; color:#0F172A;">Seleccionar Dispositivo para Reporte</h3>
+          <p id="devSelectSub" style="margin:4px 0 0; font-size:12px; color:#64748B;">El token tiene 2 equipos vinculados. Selecciona el objetivo a auditar:</p>
+        </div>
+        <button class="act-btn" onclick="closeDeviceSelectModal()" style="font-size:18px; line-height:1;">&times;</button>
+      </div>
+      <div id="devSelectOptions" style="padding:20px 22px; display:flex; flex-direction:column; gap:12px;"></div>
+    </div>
+  </div>
 
   <!-- Modal de incidentes por token -->
   <div id="incidentModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,23,42,0.55); align-items:flex-start; justify-content:center; padding:5vh 16px; overflow:auto;">
@@ -1443,7 +1521,7 @@
             <td>${dev2}</td>
             <td>${pill}</td>
             <td style="text-align:right; white-space:nowrap;">
-              <button class="act-btn" title="Ver incidentes" onclick="openTokenIncidents('${t.token_id}')">${SVG.incident}</button>
+              <button class="act-btn" title="Ver incidentes y reporte" onclick="handleIncidentClick('${t.token_id}')">${SVG.incident}</button>
               <button class="act-btn act-btn-del" title="Eliminar token" onclick="deleteMyToken('${t.token_id}')">${SVG.trash}</button>
             </td>
           </tr>
@@ -1493,6 +1571,8 @@
 
     /* ===================== Incidentes por token ===================== */
     let currentIncidentData = null;
+    let currentActiveTargetDevice = 'ALL';
+    let pendingIncidentToken = null;
 
     function escapeHtml(s) {
       return String(s ?? "").replace(/[&<>"']/g, c => ({
@@ -1504,7 +1584,111 @@
       document.getElementById("incidentModal").style.display = "none";
     }
 
-    async function openTokenIncidents(tokId) {
+    function closeDeviceSelectModal() {
+      document.getElementById("deviceSelectModal").style.display = "none";
+    }
+
+    function getDeviceDisplayInfo(deviceId) {
+      if (!deviceId) return { id: "", name: "Dispositivo libre", platform: "Desconocido", icon: SVG.browser };
+      const dev = portalCompanyDevicesMap.get(deviceId);
+      let p = "browser";
+      if (dev && dev.platform) {
+        p = dev.platform.toLowerCase();
+      } else if (deviceId.includes("7456") || deviceId.includes("android")) {
+        p = "android";
+      } else if (deviceId.includes("0b09") || deviceId.includes("windows")) {
+        p = "windows";
+      }
+
+      let icon = SVG.browser;
+      let platLabel = "Extension Web";
+      if (p === "windows") {
+        icon = SVG.windows;
+        platLabel = "Windows";
+      } else if (p === "android") {
+        icon = SVG.android;
+        platLabel = "Android";
+      }
+
+      const devName = (dev && dev.hostname && dev.hostname !== "auto-enrolled-endpoint")
+        ? dev.hostname
+        : (dev && dev.device_model && dev.device_model !== "Corporate-Device" ? dev.device_model : (p === "android" ? "AegisQRO-Android" : (p === "windows" ? "Windows-Agent" : "Brave-Extension")));
+
+      return { id: deviceId, name: devName, platform: platLabel, icon: icon };
+    }
+
+    function handleIncidentClick(tokId) {
+      const tok = allCompanyTokens.find(t => t.token_id === tokId);
+      const d1 = tok ? tok.assigned_device_id : null;
+      const d2 = tok ? tok.secondary_device_id : null;
+
+      if (d1 && d2) {
+        showDeviceSelectModal(tok, d1, d2);
+      } else if (d1 || d2) {
+        openTokenIncidents(tokId, d1 || d2);
+      } else {
+        openTokenIncidents(tokId, 'ALL');
+      }
+    }
+
+    function showDeviceSelectModal(tok, d1, d2) {
+      pendingIncidentToken = tok;
+      const sub = document.getElementById("devSelectSub");
+      if (sub) {
+        sub.textContent = `Token: ${tok.token_id} · Usuario: ${tok.assigned_employee_id || "sin asignar"}`;
+      }
+
+      const info1 = getDeviceDisplayInfo(d1);
+      const info2 = getDeviceDisplayInfo(d2);
+
+      const container = document.getElementById("devSelectOptions");
+      container.innerHTML = `
+        <button class="dev-choice-card" onclick="selectDeviceForReport('${tok.token_id}', '${d1}')">
+          <div class="dev-choice-icon">${info1.icon}</div>
+          <div class="dev-choice-info">
+            <div class="dev-choice-title">Dispositivo 1: ${escapeHtml(info1.name)}</div>
+            <div class="dev-choice-sub"><span class="id-chip" style="font-size:11px;">${escapeHtml(d1)}</span> &nbsp;·&nbsp; Plataforma: ${escapeHtml(info1.platform)}</div>
+          </div>
+          <span style="font-size:12px; font-weight:600; color:#2563EB;">Ver Reporte &rarr;</span>
+        </button>
+
+        <button class="dev-choice-card" onclick="selectDeviceForReport('${tok.token_id}', '${d2}')">
+          <div class="dev-choice-icon">${info2.icon}</div>
+          <div class="dev-choice-info">
+            <div class="dev-choice-title">Dispositivo 2: ${escapeHtml(info2.name)}</div>
+            <div class="dev-choice-sub"><span class="id-chip" style="font-size:11px;">${escapeHtml(d2)}</span> &nbsp;·&nbsp; Plataforma: ${escapeHtml(info2.platform)}</div>
+          </div>
+          <span style="font-size:12px; font-weight:600; color:#2563EB;">Ver Reporte &rarr;</span>
+        </button>
+
+        <button class="dev-choice-card" onclick="selectDeviceForReport('${tok.token_id}', 'ALL')" style="border-top:1px dashed #CBD5E1; margin-top:4px;">
+          <div class="dev-choice-icon" style="background:#F1F5F9; color:#475569;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          </div>
+          <div class="dev-choice-info">
+            <div class="dev-choice-title">Ambos Dispositivos (Consolidado)</div>
+            <div class="dev-choice-sub">Auditoria forense combinada de los 2 dispositivos vinculados</div>
+          </div>
+          <span style="font-size:12px; font-weight:600; color:#475569;">Ver Ambos &rarr;</span>
+        </button>
+      `;
+
+      document.getElementById("deviceSelectModal").style.display = "flex";
+    }
+
+    function selectDeviceForReport(tokId, targetDeviceId) {
+      closeDeviceSelectModal();
+      openTokenIncidents(tokId, targetDeviceId);
+    }
+
+    function switchIncidentDeviceTab(newTargetDeviceId) {
+      if (!currentIncidentData) return;
+      currentActiveTargetDevice = newTargetDeviceId;
+      renderIncidentModal(currentIncidentData, newTargetDeviceId);
+    }
+
+    async function openTokenIncidents(tokId, targetDeviceId = 'ALL') {
+      currentActiveTargetDevice = targetDeviceId;
       const modal = document.getElementById("incidentModal");
       const body = document.getElementById("incidentBody");
       const subtitle = document.getElementById("incidentSubtitle");
@@ -1525,7 +1709,7 @@
           return;
         }
         currentIncidentData = data;
-        renderIncidentModal(data);
+        renderIncidentModal(data, currentActiveTargetDevice);
       } catch (e) {
         body.innerHTML = `<p style="color:#DC2626;">Error al cargar incidentes: ${escapeHtml(String(e))}</p>`;
       }
@@ -1681,18 +1865,45 @@
       return Object.values(groups).sort((a, b) => b.maxScore - a.maxScore || b.count - a.count);
     }
 
-    function renderIncidentModal(data) {
+    function renderIncidentModal(data, targetDevice = 'ALL') {
+      currentActiveTargetDevice = targetDevice || 'ALL';
       const t = data.token || {};
       const s = data.summary || {};
-      modalAllEvents = data.events || [];
-      modalAllArtifacts = data.artifacts || [];
+      const rawEvents = data.events || [];
+      const rawArtifacts = data.artifacts || [];
+      const d1 = t.assigned_device_id;
+      const d2 = t.secondary_device_id;
+
+      if (targetDevice && targetDevice !== 'ALL') {
+        modalAllEvents = rawEvents.filter(e => e.device_id === targetDevice);
+        modalAllArtifacts = rawArtifacts.filter(a => a.device_id === targetDevice);
+      } else {
+        modalAllEvents = rawEvents;
+        modalAllArtifacts = rawArtifacts;
+      }
       modalEventPage = 1;
 
-      document.getElementById("incidentSubtitle").textContent =
-        `${t.token_id || ""} · ${t.assigned_employee_id || "sin usuario"} · cuenta ${data.company_id || ""}`;
+      const scopeLabel = targetDevice === 'ALL'
+        ? "Ambos Dispositivos (Consolidado)"
+        : `Dispositivo: ${targetDevice}`;
 
-      const riskEntries = Object.entries(s.by_risk_level || {});
-      const typeEntries = Object.entries(s.by_event_type || {}).sort((a, b) => b[1] - a[1]);
+      document.getElementById("incidentSubtitle").textContent =
+        `${t.token_id || ""} · ${scopeLabel} · ${t.assigned_employee_id || "sin usuario"} · cuenta ${data.company_id || ""}`;
+
+      let maxThreatScore = 0;
+      let maxCurrentRiskScore = 0;
+      modalAllEvents.forEach(e => {
+        const ts = Number(e.threat_score ?? 0);
+        if (ts > maxThreatScore) maxThreatScore = ts;
+        const cr = Number(e.current_risk_score ?? 0);
+        if (cr > maxCurrentRiskScore) maxCurrentRiskScore = cr;
+      });
+      let malCount = 0;
+      modalAllArtifacts.forEach(a => {
+        if (a.verdict && !/CLEAN|BENIGN/i.test(a.verdict)) malCount++;
+        const ts = Number(a.threat_score ?? 0);
+        if (ts > maxThreatScore) maxThreatScore = ts;
+      });
 
       const pill = (txt, color, bg) =>
         `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;color:${color};background:${bg};">${escapeHtml(txt)}</span>`;
@@ -1705,38 +1916,62 @@
         return ["#475569", "#F1F5F9", l || "INFO"];
       };
 
+      let devTabsHtml = "";
+      if (d1 && d2) {
+        const cAll = rawEvents.length;
+        const c1 = rawEvents.filter(e => e.device_id === d1).length;
+        const c2 = rawEvents.filter(e => e.device_id === d2).length;
+        const info1 = getDeviceDisplayInfo(d1);
+        const info2 = getDeviceDisplayInfo(d2);
+
+        devTabsHtml = `
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; padding:6px 10px; background:#F1F5F9; border-radius:10px; border:1px solid #E2E8F0;">
+            <span style="font-size:12px; font-weight:700; color:#334155;">Filtrar Reporte por Dispositivo:</span>
+            <button class="dev-tab-btn ${targetDevice === 'ALL' ? 'active' : ''}" onclick="switchIncidentDeviceTab('ALL')">
+              Ambos Dispositivos (${cAll})
+            </button>
+            <button class="dev-tab-btn ${targetDevice === d1 ? 'active' : ''}" onclick="switchIncidentDeviceTab('${d1}')">
+              ${info1.icon} Disp 1: ${escapeHtml(info1.name)} (${c1})
+            </button>
+            <button class="dev-tab-btn ${targetDevice === d2 ? 'active' : ''}" onclick="switchIncidentDeviceTab('${d2}')">
+              ${info2.icon} Disp 2: ${escapeHtml(info2.name)} (${c2})
+            </button>
+          </div>
+        `;
+      }
+
       const summaryCards = `
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px;">
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Total Incidentes</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_incidents ?? (modalAllEvents.length + modalAllArtifacts.length)}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${modalAllEvents.length + modalAllArtifacts.length}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Telemetria</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_events ?? modalAllEvents.length}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${modalAllEvents.length}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Artefactos</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_artifacts ?? modalAllArtifacts.length}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${modalAllArtifacts.length}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#DC2626;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Maliciosos</div>
-            <div style="font-size:24px;font-weight:700;color:#DC2626;margin-top:2px;">${s.malicious_artifacts ?? 0}</div>
+            <div style="font-size:24px;font-weight:700;color:#DC2626;margin-top:2px;">${malCount}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Max. Amenaza</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${Number(s.max_threat_score ?? 0).toFixed(1)}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${maxThreatScore.toFixed(1)}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Max. Riesgo</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${Number(s.max_current_risk_score ?? 0).toFixed(1)}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${maxCurrentRiskScore.toFixed(1)}</div>
           </div>
         </div>`;
 
       const meta = `
         <div style="font-size:12.5px;color:#475569;margin-bottom:14px;line-height:1.6;background:#F8FAFC;padding:12px 14px;border-radius:8px;border:1px solid #E2E8F0;">
           <div><strong>Token:</strong> <span class="id-chip">${escapeHtml(t.token_id || "")}</span> &nbsp;·&nbsp; <strong>Usuario:</strong> <strong>${escapeHtml(t.assigned_employee_id || "sin asignar")}</strong> &nbsp;·&nbsp; <strong>Estado:</strong> ${escapeHtml(t.status || "")}</div>
-          <div style="margin-top:2px;"><strong>Dispositivos asociados:</strong> ${escapeHtml((data.devices || []).join(", ") || "ninguno")} &nbsp;·&nbsp; <strong>Plataforma:</strong> ${escapeHtml(t.platform || "browser / multi")}</div>
+          <div style="margin-top:2px;"><strong>Objetivo auditado:</strong> <span style="color:#2563EB;font-weight:700;">${escapeHtml(scopeLabel)}</span> &nbsp;·&nbsp; <strong>Equipos en token:</strong> ${escapeHtml((data.devices || []).join(", ") || "ninguno")} &nbsp;·&nbsp; <strong>Plataforma:</strong> ${escapeHtml(t.platform || "browser / multi")}</div>
         </div>`;
 
       // 1. Matriz de Amenazas Consolidadas
@@ -1875,6 +2110,7 @@
         : "";
 
       document.getElementById("incidentBody").innerHTML = `
+        ${devTabsHtml}
         ${meta}
         ${summaryCards}
         ${emptyNote}
@@ -2059,48 +2295,237 @@
       };
     }
 
-    function chunkArray(arr, size) {
-      const out = [];
-      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-      return out.length ? out : [[]];
-    }
+    function buildExecutivePdf(doc) {
+      const pages = [];
+      let curOps = [];
 
-    function buildPdf(pages) {
+      function newPage(isFirst) {
+        if (!isFirst && curOps.length > 0) {
+          pages.push(curOps.join("\n"));
+          curOps = [];
+        }
+        if (!isFirst) {
+          curOps.push("0.06 0.16 0.26 rg 0 814 595 28 re f");
+          curOps.push(`BT /F2 9.5 Tf 1 1 1 rg 36 824 Td (${pdfSafe("AEGISQRO  *  REPORTE FORENSE ZERO-TRUST")}) Tj ET`);
+          curOps.push(`BT /F1 8 Tf 0.85 0.90 0.96 rg 310 824 Td (${pdfSafe("TOKEN: " + doc.tokenId + "  |  " + doc.deviceScopeLabel)}) Tj ET`);
+        }
+      }
+
+      newPage(true);
+
+      // Page 1 Executive Banner
+      curOps.push("0.06 0.16 0.26 rg 0 780 595 62 re f");
+      curOps.push(`BT /F2 15 Tf 1 1 1 rg 36 816 Td (${pdfSafe("AEGISQRO  |  REPORTE FORENSE DE SEGURIDAD")}) Tj ET`);
+      curOps.push(`BT /F1 8.5 Tf 0.82 0.88 0.95 rg 36 798 Td (${pdfSafe("PLATAFORMA ZERO-TRUST - AUDITORIA DE ENDPOINTS Y TELEMETRIA FORENSE")}) Tj ET`);
+
+      // Sub-bar
+      curOps.push("0.94 0.96 0.98 rg 0 760 595 20 re f");
+      curOps.push("0.80 0.84 0.88 RG 0.5 w 0 760 595 0.5 re S");
+      curOps.push(`BT /F1 8 Tf 0.35 0.40 0.45 rg 36 765 Td (${pdfSafe("FECHA: " + doc.emittedAt + "  |  ALCANCE: " + doc.deviceScopeLabel + "  |  REGISTRO AUDITABLE CERTIFICADO")}) Tj ET`);
+
+      // Metadata Box (y=675, h=75, w=523)
+      curOps.push("0.97 0.98 0.99 rg 36 675 523 75 re f");
+      curOps.push("0.80 0.84 0.88 RG 0.75 w 36 675 523 75 re S");
+      curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 46 732 Td (${pdfSafe("Empresa: ")}) Tj /F1 8.5 Tf 0.1 0.1 0.1 rg (${pdfSafe(doc.companyId)}) Tj ET`);
+      curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 295 732 Td (${pdfSafe("Token ID: ")}) Tj /F1 8.5 Tf 0.15 0.35 0.8 rg (${pdfSafe(doc.tokenId)}) Tj ET`);
+      curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 46 716 Td (${pdfSafe("Usuario Asignado: ")}) Tj /F1 8.5 Tf 0.1 0.1 0.1 rg (${pdfSafe(doc.employeeId)}) Tj ET`);
+      curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 295 716 Td (${pdfSafe("Estado Token: ")}) Tj /F2 8.5 Tf 0.08 0.50 0.20 rg (${pdfSafe(doc.tokenStatus)}) Tj ET`);
+      curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 46 700 Td (${pdfSafe("Objetivo Analizado: ")}) Tj /F2 8.5 Tf 0.10 0.40 0.90 rg (${pdfSafe(doc.deviceScopeLabel)}) Tj ET`);
+      curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 295 700 Td (${pdfSafe("Equipos Vinculados: ")}) Tj /F1 8.5 Tf 0.1 0.1 0.1 rg (${pdfSafe(doc.devicesList)}) Tj ET`);
+      curOps.push(`BT /F1 8 Tf 0.45 0.50 0.55 rg 46 685 Td (${pdfSafe("Plataforma: " + doc.platform + "  |  Politica: Zero-Trust Strict Endpoint Sandbox")}) Tj ET`);
+
+      // 4 KPI Cards (y=608, h=54)
+      const kpiW = 121;
+      curOps.push(`0.96 0.97 0.99 rg 36 608 ${kpiW} 54 re f 0.82 0.86 0.90 RG 0.5 w 36 608 ${kpiW} 54 re S`);
+      curOps.push(`BT /F2 7.5 Tf 0.4 0.45 0.5 rg 44 648 Td (${pdfSafe("TOTAL EVENTOS")}) Tj ET`);
+      curOps.push(`BT /F2 18 Tf 0.06 0.16 0.26 rg 44 627 Td (${pdfSafe(String(doc.totalEvents))}) Tj ET`);
+      curOps.push(`BT /F1 7 Tf 0.5 0.55 0.6 rg 44 614 Td (${pdfSafe("Telemetria auditada")}) Tj ET`);
+
+      curOps.push(`0.99 0.96 0.96 rg 170 608 ${kpiW} 54 re f 0.90 0.75 0.75 RG 0.5 w 170 608 ${kpiW} 54 re S`);
+      curOps.push(`BT /F2 7.5 Tf 0.8 0.15 0.15 rg 178 648 Td (${pdfSafe("BLOQUEADOS")}) Tj ET`);
+      curOps.push(`BT /F2 18 Tf 0.86 0.15 0.15 rg 178 627 Td (${pdfSafe(String(doc.blockedCount))}) Tj ET`);
+      curOps.push(`BT /F1 7 Tf 0.5 0.55 0.6 rg 178 614 Td (${pdfSafe("Amenazas neutralizadas")}) Tj ET`);
+
+      curOps.push(`0.99 0.98 0.95 rg 304 608 ${kpiW} 54 re f 0.90 0.85 0.70 RG 0.5 w 304 608 ${kpiW} 54 re S`);
+      curOps.push(`BT /F2 7.5 Tf 0.7 0.35 0.05 rg 312 648 Td (${pdfSafe("AMENAZA MAXIMA")}) Tj ET`);
+      curOps.push(`BT /F2 18 Tf 0.75 0.35 0.05 rg 312 627 Td (${pdfSafe(doc.maxScore.toFixed(2))}) Tj ET`);
+      curOps.push(`BT /F1 7 Tf 0.5 0.55 0.6 rg 312 614 Td (${pdfSafe("Escala 0.0 - 1.0")}) Tj ET`);
+
+      curOps.push(`0.95 0.99 0.96 rg 438 608 ${kpiW} 54 re f 0.75 0.90 0.80 RG 0.5 w 438 608 ${kpiW} 54 re S`);
+      curOps.push(`BT /F2 7.5 Tf 0.08 0.5 0.2 rg 446 648 Td (${pdfSafe("VEREDICTO")}) Tj ET`);
+      const verdictLabel = doc.blockedCount > 0 ? "PROTEGIDO" : (doc.totalEvents > 0 ? "ACTIVO" : "LIMPIO");
+      curOps.push(`BT /F2 14 Tf 0.08 0.5 0.2 rg 446 627 Td (${pdfSafe(verdictLabel)}) Tj ET`);
+      curOps.push(`BT /F1 7 Tf 0.5 0.55 0.6 rg 446 614 Td (${pdfSafe("Politica Zero-Trust")}) Tj ET`);
+
+      let curY = 580;
+
+      // Section 1: Threat Matrix
+      if (doc.groups.length) {
+        curOps.push(`0.15 0.40 0.90 rg 36 ${curY} 4 14 re f`);
+        curOps.push(`BT /F2 10.5 Tf 0.06 0.16 0.26 rg 46 ${curY + 3} Td (${pdfSafe("1. MATRIZ DE AMENAZAS DETECTADAS (" + doc.groups.length + " Categorias)")}) Tj ET`);
+        curY -= 20;
+
+        curOps.push(`0.92 0.94 0.97 rg 36 ${curY} 523 18 re f 0.80 0.84 0.88 RG 0.5 w 36 ${curY} 523 18 re S`);
+        curOps.push(`BT /F2 8 Tf 0.3 0.35 0.4 rg 42 ${curY + 5} Td (${pdfSafe("TIPO DE AMENAZA")}) Tj ET`);
+        curOps.push(`BT /F2 8 Tf 0.3 0.35 0.4 rg 215 ${curY + 5} Td (${pdfSafe("SEVERIDAD")}) Tj ET`);
+        curOps.push(`BT /F2 8 Tf 0.3 0.35 0.4 rg 275 ${curY + 5} Td (${pdfSafe("EVENTOS")}) Tj ET`);
+        curOps.push(`BT /F2 8 Tf 0.3 0.35 0.4 rg 330 ${curY + 5} Td (${pdfSafe("DOMINIOS / DESTINOS")}) Tj ET`);
+        curOps.push(`BT /F2 8 Tf 0.3 0.35 0.4 rg 475 ${curY + 5} Td (${pdfSafe("ACCION")}) Tj ET`);
+
+        doc.groups.forEach((g, gIdx) => {
+          curY -= 20;
+          if (curY < 65) {
+            newPage(false);
+            curY = 780;
+          }
+          const rowBg = (gIdx % 2 === 0) ? "1 1 1 rg" : "0.98 0.98 0.99 rg";
+          curOps.push(`${rowBg} 36 ${curY} 523 20 re f 0.90 0.92 0.95 RG 0.5 w 36 ${curY} 523 0.5 re S`);
+
+          const title = humanizeEventType(g.type);
+          curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 42 ${curY + 6} Td (${pdfSafe(title.slice(0, 32))}) Tj ET`);
+
+          const isHigh = /CRIT|HIGH|ALTO/i.test(g.riskLevel);
+          const sevPillBg = isHigh ? "0.99 0.88 0.88 rg" : "0.99 0.95 0.78 rg";
+          const sevTextColor = isHigh ? "0.86 0.15 0.15 rg" : "0.70 0.35 0.05 rg";
+          curOps.push(`${sevPillBg} 212 ${curY + 3} 52 14 re f`);
+          curOps.push(`BT /F2 7.5 Tf ${sevTextColor} 216 ${curY + 6} Td (${pdfSafe(g.riskLevel + " " + g.maxScore.toFixed(1))}) Tj ET`);
+
+          curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 282 ${curY + 6} Td (${pdfSafe(String(g.count))}) Tj ET`);
+
+          const hostsArr = Array.from(g.hosts);
+          const hostsText = hostsArr.slice(0, 2).join(", ") || "No especificado";
+          curOps.push(`BT /F1 7.5 Tf 0.15 0.35 0.80 rg 330 ${curY + 6} Td (${pdfSafe(hostsText.slice(0, 30))}) Tj ET`);
+
+          const isBlocked = Array.from(g.actions).some(a => a.includes("BLOQ"));
+          const actBg = isBlocked ? "0.99 0.88 0.88 rg" : "0.99 0.95 0.78 rg";
+          const actTextColor = isBlocked ? "0.86 0.15 0.15 rg" : "0.70 0.35 0.05 rg";
+          const actText = isBlocked ? "BLOQUEADO" : "MARCADO";
+          curOps.push(`${actBg} 472 ${curY + 3} 60 14 re f`);
+          curOps.push(`BT /F2 7.5 Tf ${actTextColor} 476 ${curY + 6} Td (${pdfSafe(actText)}) Tj ET`);
+        });
+        curY -= 15;
+      }
+
+      // Section 2: Telemetry Events
+      if (doc.events.length) {
+        if (curY < 120) {
+          newPage(false);
+          curY = 780;
+        }
+        curOps.push(`0.15 0.40 0.90 rg 36 ${curY} 4 14 re f`);
+        curOps.push(`BT /F2 10.5 Tf 0.06 0.16 0.26 rg 46 ${curY + 3} Td (${pdfSafe("2. REGISTRO FORENSE DE INCIDENTES (" + doc.events.length + " Eventos)")}) Tj ET`);
+        curY -= 18;
+
+        const displayEvents = doc.events.slice(0, 100);
+
+        displayEvents.forEach((e, idx) => {
+          const cardH = 34;
+          curY -= cardH;
+          if (curY < 65) {
+            newPage(false);
+            curY = 780 - cardH;
+          }
+
+          const tPart = formatDateReadable(e.received_at);
+          const clean = getCleanIncidentSummary(e);
+          const isBlocked = clean.action === "BLOQUEADO";
+          const strokeCol = isBlocked ? "0.90 0.75 0.75 RG" : "0.85 0.88 0.92 RG";
+          const fillCol = isBlocked ? "0.99 0.97 0.97 rg" : "0.99 0.99 1.00 rg";
+
+          curOps.push(`${fillCol} 36 ${curY} 523 ${cardH} re f ${strokeCol} 0.5 w 36 ${curY} 523 ${cardH} re S`);
+
+          const num = String(idx + 1).padStart(3, "0");
+          const typeTitle = humanizeEventType(e.event_type);
+          curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 44 ${curY + 22} Td (${pdfSafe("#" + num + "  |  " + tPart.date + " " + tPart.time + "  |  " + typeTitle)}) Tj ET`);
+
+          const actCol = isBlocked ? "0.86 0.15 0.15 rg" : "0.70 0.35 0.05 rg";
+          const actBg = isBlocked ? "0.99 0.88 0.88 rg" : "0.99 0.95 0.78 rg";
+          curOps.push(`${actBg} 484 ${curY + 18} 68 13 re f`);
+          curOps.push(`BT /F2 7.5 Tf ${actCol} 488 ${curY + 21} Td (${pdfSafe(clean.action)}) Tj ET`);
+
+          const devStr = e.device_id || "Dispositivo";
+          const userStr = e.employee_id || doc.employeeId || "General";
+          const srcStr = humanizeSource(e.source);
+          curOps.push(`BT /F1 7.2 Tf 0.45 0.50 0.55 rg 44 ${curY + 12} Td (${pdfSafe("Riesgo: " + (e.risk_level || "INFO") + " (" + Number(e.threat_score ?? 0).toFixed(2) + ")  |  Origen: " + srcStr + "  |  Equipo: " + devStr + "  |  Usuario: " + userStr)}) Tj ET`);
+
+          curOps.push(`BT /F1 7.2 Tf 0.15 0.20 0.25 rg 44 ${curY + 3} Td (${pdfSafe("Objetivo: " + clean.target + "  |  Detalle: " + clean.finding.slice(0, 75))}) Tj ET`);
+
+          curY -= 4;
+        });
+      }
+
+      // Section 3: Artifacts
+      if (doc.artifacts.length) {
+        if (curY < 120) {
+          newPage(false);
+          curY = 780;
+        }
+        curOps.push(`0.15 0.40 0.90 rg 36 ${curY} 4 14 re f`);
+        curOps.push(`BT /F2 10.5 Tf 0.06 0.16 0.26 rg 46 ${curY + 3} Td (${pdfSafe("3. REGISTRO DE ARTEFACTOS ESCANEADOS (" + doc.artifacts.length + ")")}) Tj ET`);
+        curY -= 18;
+
+        doc.artifacts.forEach((a, idx) => {
+          const cardH = 34;
+          curY -= cardH;
+          if (curY < 65) {
+            newPage(false);
+            curY = 780 - cardH;
+          }
+          const tPart = formatDateReadable(a.scanned_at);
+          const isMal = /MALICIOUS|CRITICAL|HIGH/i.test(a.verdict);
+          const fillCol = isMal ? "0.99 0.96 0.96 rg" : "0.97 0.99 0.97 rg";
+          const strokeCol = isMal ? "0.90 0.75 0.75 RG" : "0.75 0.90 0.80 RG";
+          curOps.push(`${fillCol} 36 ${curY} 523 ${cardH} re f ${strokeCol} 0.5 w 36 ${curY} 523 ${cardH} re S`);
+
+          const num = String(idx + 1).padStart(3, "0");
+          curOps.push(`BT /F2 8.5 Tf 0.06 0.16 0.26 rg 44 ${curY + 22} Td (${pdfSafe("#" + num + "  |  " + tPart.date + " " + tPart.time + "  |  " + (a.file_type || "Binario") + "  |  VEREDICTO: " + (a.verdict || "CLEAN"))}) Tj ET`);
+
+          const reasons = humanizeReasons(a.detection_reasons).join(" · ") || a.detection_method || "Analisis heuristico";
+          curOps.push(`BT /F1 7.2 Tf 0.45 0.50 0.55 rg 44 ${curY + 12} Td (${pdfSafe("Equipo: " + (a.device_id || "") + "  |  SHA-256: " + (a.artifact_sha256 || "").slice(0, 32))}) Tj ET`);
+          curOps.push(`BT /F1 7.2 Tf 0.15 0.20 0.25 rg 44 ${curY + 3} Td (${pdfSafe("Hallazgos: " + reasons.slice(0, 85))}) Tj ET`);
+          curY -= 4;
+        });
+      }
+
+      if (curOps.length > 0) pages.push(curOps.join("\n"));
+
+      const numPages = pages.length;
+      const pageKids = [];
       const objects = [];
-      const pageNums = [];
-      let num = 3;
-      const fontNum = 3 + pages.length * 2;
 
-      pages.forEach(lines => {
-        const pageNum = num++;
-        const contentNum = num++;
-        pageNums.push(pageNum);
+      for (let i = 0; i < numPages; i++) {
+        const pageNum = 5 + i * 2;
+        const contentNum = 6 + i * 2;
+        pageKids.push(`${pageNum} 0 R`);
 
-        let stream = "BT /F1 9 Tf 36 805 Td 13 TL\n";
-        lines.forEach(ln => { stream += `(${ln}) Tj T*\n`; });
-        stream += "ET";
-
-        objects[contentNum] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
-        objects[pageNum] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontNum} 0 R >> >> /Contents ${contentNum} 0 R >>`;
-      });
+        const footer = `
+          0.82 0.85 0.90 RG 0.5 w 36 38 523 0.5 re S
+          BT /F1 7.5 Tf 0.45 0.5 0.55 rg 36 26 Td (${pdfSafe("AEGISQRO Zero-Trust Enterprise Forensics  *  Cifrado y Auditoria Verificada")}) Tj ET
+          BT /F2 7.5 Tf 0.45 0.5 0.55 rg 495 26 Td (${pdfSafe("Pagina " + (i + 1) + " de " + numPages)}) Tj ET
+        `;
+        const fullStream = pages[i] + "\n" + footer;
+        objects[contentNum] = `<< /Length ${fullStream.length} >>\nstream\n${fullStream}\nendstream`;
+        objects[pageNum] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentNum} 0 R >>`;
+      }
 
       objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
-      objects[2] = `<< /Type /Pages /Kids [${pageNums.map(n => n + " 0 R").join(" ")}] /Count ${pageNums.length} >>`;
-      objects[fontNum] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+      objects[2] = `<< /Type /Pages /Kids [${pageKids.join(" ")}] /Count ${numPages} >>`;
+      objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+      objects[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
 
-      const maxNum = fontNum;
+      const totalObjs = 4 + numPages * 2;
       let pdf = "%PDF-1.4\n";
       const offsets = [];
-      for (let n = 1; n <= maxNum; n++) {
+      for (let n = 1; n <= totalObjs; n++) {
         offsets[n] = pdf.length;
         pdf += `${n} 0 obj\n${objects[n] || "<< >>"}\nendobj\n`;
       }
       const xrefStart = pdf.length;
-      pdf += `xref\n0 ${maxNum + 1}\n0000000000 65535 f \n`;
-      for (let n = 1; n <= maxNum; n++) {
+      pdf += `xref\n0 ${totalObjs + 1}\n0000000000 65535 f \n`;
+      for (let n = 1; n <= totalObjs; n++) {
         pdf += `${String(offsets[n]).padStart(10, "0")} 00000 n \n`;
       }
-      pdf += `trailer\n<< /Size ${maxNum + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+      pdf += `trailer\n<< /Size ${totalObjs + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
 
       const bytes = new Uint8Array(pdf.length);
       for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xFF;
@@ -2111,108 +2536,63 @@
       const data = currentIncidentData;
       if (!data) return;
       const t = data.token || {};
-      const s = data.summary || {};
-      const events = data.events || [];
-      const artifacts = data.artifacts || [];
+      const targetDevice = currentActiveTargetDevice || 'ALL';
 
-      const lines = [];
-      const hr = "--------------------------------------------------------------------------------";
-      const dhr = "================================================================================";
+      const rawEvents = data.events || [];
+      const rawArtifacts = data.artifacts || [];
 
-      lines.push(dhr);
-      lines.push(pdfSafe("          AEGISQRO ZERO-TRUST -- REPORTE DE INCIDENTES DE SEGURIDAD"));
-      lines.push(dhr);
-      lines.push("");
-      lines.push(pdfSafe("DATOS DEL TOKEN Y DE LA CUENTA"));
-      lines.push(hr);
-      lines.push(pdfSafe(`Token ID:            ${t.token_id || "-"}`));
-      lines.push(pdfSafe(`Empresa / Cuenta:    ${data.company_id || "-"}`));
-      lines.push(pdfSafe(`Usuario Asignado:    ${t.assigned_employee_id || "Sin asignar"}`));
-      lines.push(pdfSafe(`Dispositivos:        ${(data.devices || []).join(", ") || "Ninguno registrado"}`));
-      lines.push(pdfSafe(`Estado de Token:     ${t.status || "ACTIVE"}`));
-      lines.push(pdfSafe(`Plataforma / Agente: ${t.platform || "Multiplataforma"}`));
-      lines.push(pdfSafe(`Fecha de Emision:    ${new Date().toLocaleString("es-MX")} (Hora Local)`));
-      lines.push(hr);
-      lines.push("");
+      const filteredEvents = (targetDevice && targetDevice !== 'ALL')
+        ? rawEvents.filter(e => e.device_id === targetDevice)
+        : rawEvents;
+      const filteredArtifacts = (targetDevice && targetDevice !== 'ALL')
+        ? rawArtifacts.filter(a => a.device_id === targetDevice)
+        : rawArtifacts;
 
-      lines.push(pdfSafe("RESUMEN EJECUTIVO DE AMENAZAS"));
-      lines.push(hr);
-      lines.push(pdfSafe(`Total Incidentes:     ${s.total_incidents ?? (events.length + artifacts.length)}`));
-      lines.push(pdfSafe(`Eventos Telemetria:   ${s.total_events ?? events.length}`));
-      lines.push(pdfSafe(`Artefactos Sandbox:   ${s.total_artifacts ?? artifacts.length}`));
-      lines.push(pdfSafe(`Amenazas Maliciosas:  ${s.malicious_artifacts ?? 0}`));
-      lines.push(pdfSafe(`Nivel Maximo Amenaza: ${Number(s.max_threat_score ?? 0).toFixed(2)} / 1.00`));
+      const groups = groupEventsByType(filteredEvents);
 
-      const groups = groupEventsByType(events);
-      if (groups.length) {
-        lines.push(pdfSafe(`MATRIZ DE AMENAZAS CONSOLIDADAS (${groups.length} CATEGORIAS)`));
-        lines.push(hr);
-        groups.forEach(g => {
-          const hostsArr = Array.from(g.hosts).slice(0, 4).join(", ") || "No especificado";
-          const isBlocked = Array.from(g.actions).some(a => a.includes("BLOQ"));
-          const act = isBlocked ? "BLOQUEADO" : "MARCADO / ALERTA";
-          lines.push(pdfSafe(`Amenaza:     ${humanizeEventType(g.type)}`));
-          lines.push(pdfSafe(`  Severidad: ${g.riskLevel} (${g.maxScore.toFixed(2)}) | Detecciones: ${g.count} eventos | Accion: ${act}`));
-          lines.push(pdfSafe(`  Objetivos: ${hostsArr}`));
-          lines.push(hr);
-        });
-        lines.push("");
-      }
+      let blockedCount = 0;
+      let maxScore = 0;
+      filteredEvents.forEach(e => {
+        const clean = getCleanIncidentSummary(e);
+        if (clean.action === "BLOQUEADO") blockedCount++;
+        const s = Number(e.threat_score ?? 0);
+        if (s > maxScore) maxScore = s;
+      });
+      filteredArtifacts.forEach(a => {
+        const s = Number(a.threat_score ?? 0);
+        if (s > maxScore) maxScore = s;
+      });
 
-      if (events.length) {
-        lines.push(pdfSafe(`REGISTRO AUDITABLE DE INCIDENTES DE TELEMETRIA (${events.length})`));
-        lines.push(hr);
+      const scopeLabel = targetDevice === 'ALL'
+        ? "Ambos Dispositivos (Consolidado)"
+        : `Dispositivo: ${targetDevice}`;
 
-        events.forEach((e, idx) => {
-          const num = String(idx + 1).padStart(3, "0");
-          const tPart = formatDateReadable(e.received_at);
-          const cleanInfo = getCleanIncidentSummary(e);
-          const score = Number(e.threat_score ?? 0).toFixed(2);
-          const typeName = humanizeEventType(e.event_type);
-          const srcName = humanizeSource(e.source);
-          const userStr = e.employee_id || t.assigned_employee_id || "General";
-          const devStr = e.device_id || "Dispositivo";
+      const docData = {
+        companyId: data.company_id || "Cuenta Corporativa",
+        tokenId: t.token_id || "Token",
+        employeeId: t.assigned_employee_id || "Sin Asignar",
+        tokenStatus: t.status || "ACTIVE",
+        platform: t.platform || "Multiplataforma",
+        targetDevice: targetDevice,
+        deviceScopeLabel: scopeLabel,
+        devicesList: (data.devices || []).join(", ") || "Ninguno",
+        emittedAt: new Date().toLocaleString("es-MX"),
+        totalEvents: filteredEvents.length,
+        blockedCount: blockedCount,
+        maxScore: maxScore,
+        groups: groups,
+        events: filteredEvents,
+        artifacts: filteredArtifacts
+      };
 
-          lines.push(pdfSafe(`[INCIDENTE #${num}]  ${tPart.date} ${tPart.time}  |  RIESGO: ${e.risk_level || "INFO"} (${score})`));
-          lines.push(pdfSafe(`  Amenaza:    ${typeName}`));
-          lines.push(pdfSafe(`  Origen:     ${srcName} | Equipo: ${devStr} | Usuario: ${userStr}`));
-          lines.push(pdfSafe(`  Accion:     ${cleanInfo.action} | Objetivo: ${cleanInfo.target}`));
-          lines.push(pdfSafe(`  Hallazgo:   ${cleanInfo.finding}`));
-          lines.push(hr);
-        });
-        lines.push("");
-      }
-
-      if (artifacts.length) {
-        lines.push(pdfSafe(`REGISTRO DE ARTEFACTOS Y ARCHIVOS ESCANEADOS (${artifacts.length})`));
-        lines.push(hr);
-
-        artifacts.forEach((a, idx) => {
-          const num = String(idx + 1).padStart(3, "0");
-          const tPart = formatDateReadable(a.scanned_at);
-          const reasons = humanizeReasons(a.detection_reasons).join(" | ") || a.detection_method || "Analisis heuristico";
-          const sha = a.artifact_sha256 ? a.artifact_sha256.slice(0, 24) + "..." : "No disponible";
-
-          lines.push(pdfSafe(`[ARTEFACTO #${num}]  ${tPart.date} ${tPart.time}  |  VEREDICTO: ${a.verdict || "CLEAN"}`));
-          lines.push(pdfSafe(`  Tipo:       ${a.file_type || "Binario"} | Hash SHA-256: ${sha}`));
-          lines.push(pdfSafe(`  Equipo:     ${a.device_id || ""} | Usuario: ${a.employee_id || ""}`));
-          lines.push(pdfSafe(`  Motivos:    ${reasons}`));
-          lines.push(hr);
-        });
-        lines.push("");
-      }
-
-      lines.push(pdfSafe("AEGISQRO Plataforma de Ciberseguridad Zero-Trust -- Cifrado Verificado"));
-      lines.push(dhr);
-
-      const pages = chunkArray(lines, 48);
-      const pdfBytes = buildPdf(pages);
+      const pdfBytes = buildExecutivePdf(docData);
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const safeTok = String(t.token_id || "token").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 40);
+      const safeTok = String(t.token_id || "token").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 30);
+      const safeScope = (targetDevice === 'ALL' ? 'consolidado' : targetDevice).replace(/[^A-Za-z0-9_-]/g, "_");
       a.href = url;
-      a.download = `reporte-incidentes-${safeTok}.pdf`;
+      a.download = `reporte-forense-${safeTok}-${safeScope}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -2223,9 +2603,36 @@
       const data = currentIncidentData;
       if (!data) return;
       const t = data.token || {};
-      const s = data.summary || {};
-      const events = data.events || [];
-      const artifacts = data.artifacts || [];
+      const targetDevice = currentActiveTargetDevice || 'ALL';
+
+      const rawEvents = data.events || [];
+      const rawArtifacts = data.artifacts || [];
+
+      const filteredEvents = (targetDevice && targetDevice !== 'ALL')
+        ? rawEvents.filter(e => e.device_id === targetDevice)
+        : rawEvents;
+      const filteredArtifacts = (targetDevice && targetDevice !== 'ALL')
+        ? rawArtifacts.filter(a => a.device_id === targetDevice)
+        : rawArtifacts;
+
+      const groups = groupEventsByType(filteredEvents);
+
+      let blockedCount = 0;
+      let maxScore = 0;
+      filteredEvents.forEach(e => {
+        const clean = getCleanIncidentSummary(e);
+        if (clean.action === "BLOQUEADO") blockedCount++;
+        const s = Number(e.threat_score ?? 0);
+        if (s > maxScore) maxScore = s;
+      });
+      filteredArtifacts.forEach(a => {
+        const s = Number(a.threat_score ?? 0);
+        if (s > maxScore) maxScore = s;
+      });
+
+      const scopeLabel = targetDevice === 'ALL'
+        ? "Ambos Dispositivos (Consolidado)"
+        : `Dispositivo: ${targetDevice}`;
 
       const printWin = window.open("", "_blank");
       if (!printWin) {
@@ -2267,8 +2674,8 @@
         <body>
           <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #0F2942; padding-bottom: 10px; margin-bottom: 16px;">
             <div>
-              <h1>AEGISQRO &mdash; REPORTE AUDITABLE DE SEGURIDAD ZERO-TRUST</h1>
-              <div class="sub">Auditoria de Incidentes y Telemetria en Tiempo Real</div>
+              <h1>AEGISQRO &mdash; REPORTE FORENSE DE SEGURIDAD ZERO-TRUST</h1>
+              <div class="sub">Auditoria de Incidentes y Telemetria Forense &nbsp;|&nbsp; <strong>${escapeHtml(scopeLabel)}</strong></div>
             </div>
             <div style="text-align:right;">
               <span class="id-chip">${escapeHtml(t.token_id || "")}</span>
@@ -2277,16 +2684,16 @@
           </div>
 
           <div class="card">
-            <div><strong>Empresa / Cuenta:</strong> ${escapeHtml(data.company_id || "")} &nbsp;|&nbsp; <strong>Usuario Asignado:</strong> <strong>${escapeHtml(t.assigned_employee_id || "Sin asignar")}</strong> &nbsp;|&nbsp; <strong>Estado:</strong> ${escapeHtml(t.status || "ACTIVE")}</div>
-            <div style="margin-top:4px;"><strong>Dispositivos Vinculados:</strong> ${escapeHtml((data.devices || []).join(", ") || "Ninguno registrado")} &nbsp;|&nbsp; <strong>Plataforma:</strong> ${escapeHtml(t.platform || "Multiplataforma")}</div>
+            <div><strong>Empresa / Cuenta:</strong> ${escapeHtml(data.company_id || "")} &nbsp;|&nbsp; <strong>Usuario:</strong> <strong>${escapeHtml(t.assigned_employee_id || "Sin asignar")}</strong> &nbsp;|&nbsp; <strong>Estado:</strong> ${escapeHtml(t.status || "ACTIVE")}</div>
+            <div style="margin-top:4px;"><strong>Alcance Auditado:</strong> <span style="color:#2563EB;font-weight:700;">${escapeHtml(scopeLabel)}</span> &nbsp;|&nbsp; <strong>Equipos en Token:</strong> ${escapeHtml((data.devices || []).join(", ") || "Ninguno")} &nbsp;|&nbsp; <strong>Plataforma:</strong> ${escapeHtml(t.platform || "Multiplataforma")}</div>
           </div>
 
           <div class="kpis">
-            <div class="kpi"><div class="kpi-lbl">Total Incidentes</div><div class="kpi-val">${s.total_incidents ?? events.length}</div></div>
-            <div class="kpi"><div class="kpi-lbl">Eventos Telemetria</div><div class="kpi-val">${s.total_events ?? events.length}</div></div>
-            <div class="kpi"><div class="kpi-lbl">Artefactos Sandbox</div><div class="kpi-val">${s.total_artifacts ?? artifacts.length}</div></div>
-            <div class="kpi"><div class="kpi-lbl">Maliciosos</div><div class="kpi-val" style="color:#DC2626;">${s.malicious_artifacts ?? 0}</div></div>
-            <div class="kpi"><div class="kpi-lbl">Max. Amenaza</div><div class="kpi-val">${Number(s.max_threat_score ?? 0).toFixed(2)}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Total Incidentes</div><div class="kpi-val">${filteredEvents.length + filteredArtifacts.length}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Eventos Telemetria</div><div class="kpi-val">${filteredEvents.length}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Bloqueados</div><div class="kpi-val" style="color:#DC2626;">${blockedCount}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Artefactos Sandbox</div><div class="kpi-val">${filteredArtifacts.length}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Max. Amenaza</div><div class="kpi-val">${maxScore.toFixed(2)}</div></div>
           </div>
 
           <h3 style="font-size:13px; margin:20px 0 8px; color:#0F172A; font-weight:700;">1. Matriz de Amenazas Consolidadas (${groups.length} Categorias)</h3>
@@ -2321,7 +2728,7 @@
             </tbody>
           </table>
 
-          <h3 style="font-size:13px; margin:24px 0 8px; color:#0F172A; font-weight:700;">2. Registro Cronologico de Telemetria (${events.length} Eventos)</h3>
+          <h3 style="font-size:13px; margin:24px 0 8px; color:#0F172A; font-weight:700;">2. Registro Cronologico de Telemetria (${filteredEvents.length} Eventos)</h3>
           <table>
             <thead>
               <tr>
@@ -2333,7 +2740,7 @@
               </tr>
             </thead>
             <tbody>
-              ${events.map(e => {
+              ${filteredEvents.map(e => {
                 const tPart = formatDateReadable(e.received_at);
                 const isCrit = /CRIT|HIGH/i.test(e.risk_level);
                 const pClass = isCrit ? 'pill-crit' : 'pill-warn';
