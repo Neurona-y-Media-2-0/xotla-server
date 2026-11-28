@@ -111,11 +111,27 @@ pub async fn portal_me_handler(
     let site_policy = state.db.load_company_site_policy(&cid);
     let total_tokens_created = state.db.count_company_non_revoked_tokens(&cid);
 
+    let all_registered_devices = state.db.load_all_devices();
+    let mut company_device_ids = std::collections::HashSet::new();
+    for t in &tokens {
+        if let Some(ref d1) = t.assigned_device_id {
+            company_device_ids.insert(d1.clone());
+        }
+        if let Some(ref d2) = t.secondary_device_id {
+            company_device_ids.insert(d2.clone());
+        }
+    }
+    let company_devices: Vec<_> = all_registered_devices
+        .into_iter()
+        .filter(|d| company_device_ids.contains(&d.device_id) || company_device_ids.contains(&d.hardware_id))
+        .collect();
+
     Ok(Json(json!({
         "enterprise_account": account,
         "total_tokens_in_pool": total_tokens_created,
         "can_create_more": total_tokens_created < account.total_allocated_tokens,
         "tokens": tokens,
+        "devices": company_devices,
         "site_policy": site_policy
     })))
 }
@@ -276,15 +292,21 @@ pub async fn portal_incidents_handler(
 
     let filtered_events: Vec<_> = all_events
         .into_iter()
-        .filter(|e| dev_set.contains(&e.device_id) || emp_set.contains(&e.employee_id) || cid == DEFAULT_COMPANY_ID)
+        .filter(|e| dev_set.contains(&e.device_id) || emp_set.contains(&e.employee_id) || (cid == DEFAULT_COMPANY_ID && dev_set.is_empty()))
+        .collect();
+
+    let filtered_artifacts: Vec<_> = artifacts
+        .into_iter()
+        .filter(|a| dev_set.contains(&a.device_id) || emp_set.contains(&a.employee_id) || (cid == DEFAULT_COMPANY_ID && dev_set.is_empty()))
         .collect();
 
     Ok(Json(json!({
         "status": "OK",
         "company_id": cid,
         "total_events": filtered_events.len(),
+        "total_artifacts": filtered_artifacts.len(),
         "events": filtered_events,
-        "artifacts": artifacts
+        "artifacts": filtered_artifacts
     })))
 }
 
