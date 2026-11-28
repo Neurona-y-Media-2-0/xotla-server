@@ -9,7 +9,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::IntoResponse,
-    routing::{delete, get, head, post, put},
+    routing::{get, head, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};

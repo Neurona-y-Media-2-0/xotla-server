@@ -5,44 +5,70 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AegisQRO — Datos Recibidos y Perfil de Conducta</title>
   <style>
+    :root {
+      --bg: #0B0F14;
+      --surface: #111823;
+      --elevated: #1E293B;
+      --text: #E2E8F0;
+      --muted: #94A3B8;
+      --cyan: #22D3EE;
+      --green: #34D399;
+      --amber: #F59E0B;
+      --red: #EF4444;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      background: #0b0e14;
-      color: #e6edf3;
+      background: var(--bg);
+      color: var(--text);
       line-height: 1.5;
     }
     .navbar {
-      background: #121722;
-      border-bottom: 1px solid #21293a;
+      background: var(--surface);
+      border-bottom: 1px solid var(--elevated);
       padding: 14px 28px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .brand { font-size: 16px; font-weight: 800; color: #fff; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: 0.03em;
+    }
+    .brand svg { color: var(--cyan); }
     .nav-links { display: flex; gap: 10px; }
     .nav-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
       padding: 8px 16px;
       border-radius: 8px;
       font-size: 13px;
       font-weight: 600;
       text-decoration: none;
-      color: #8b949e;
+      color: var(--muted);
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
     }
     .nav-btn.active {
-      background: #1f6feb;
-      color: #fff;
+      background: rgba(34, 211, 238, 0.14);
+      color: var(--cyan);
+      border-color: rgba(34, 211, 238, 0.4);
     }
     .nav-btn:hover:not(.active) {
-      background: #192030;
-      color: #fff;
+      background: var(--elevated);
+      color: var(--text);
     }
     .container { max-width: 1380px; margin: 28px auto; padding: 0 20px 60px; }
     .card {
-      background: #121722;
-      border: 1px solid #21293a;
+      background: var(--surface);
+      border: 1px solid var(--elevated);
       border-radius: 12px;
       padding: 20px;
       margin-bottom: 20px;
@@ -51,122 +77,156 @@
     .table-scroll { width: 100%; overflow-x: auto; }
     .table-scroll table { width: 100%; table-layout: fixed; }
     td, th { overflow-wrap: anywhere; word-break: break-word; }
-    .col-hora { width: 10%; }
-    .col-disp { width: 13%; }
-    .col-tipo { width: 17%; }
-    .col-ver { width: 14%; }
-    .col-det { width: 30%; }
-    .col-sha { width: 9%; }
-    .col-tmp { width: 7%; }
-    h2 { margin: 0 0 12px; font-size: 16px; color: #fff; }
+    .col-hora { width: 11%; }
+    .col-disp { width: 14%; }
+    .col-tipo { width: 18%; }
+    .col-ver { width: 9%; text-align: center; }
+    .col-det { width: 32%; }
+    .col-sha { width: 10%; }
+    .col-tmp { width: 6%; text-align: center; }
+
+    h2 { margin: 0 0 12px; font-size: 16px; color: var(--text); }
     .profile-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 10px;
+      gap: 14px;
     }
-    .score-big { font-size: 28px; font-weight: 800; }
+    .score-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg);
+      border: 1px solid var(--elevated);
+      padding: 10px 16px;
+      border-radius: 12px;
+    }
+    .score-big { font-size: 26px; font-weight: 800; line-height: 1; }
+
     table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: left; }
     th {
-      color: #8b949e;
-      font-size: 11.5px;
+      color: var(--muted);
+      font-size: 11px;
       text-transform: uppercase;
+      letter-spacing: 0.05em;
       padding: 10px 12px;
-      border-bottom: 1px solid #21293a;
+      border-bottom: 1px solid var(--elevated);
     }
-    td { padding: 12px; border-bottom: 1px solid #192030; vertical-align: top; }
+    td { padding: 12px; border-bottom: 1px solid var(--elevated); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
     .mono {
-      font-family: monospace;
+      font-family: "JetBrains Mono", Consolas, monospace;
       font-size: 12px;
-      color: #79c0ff;
-      background: #0b0e14;
+      color: var(--cyan);
+      background: var(--bg);
       padding: 3px 7px;
       border-radius: 6px;
-      border: 1px solid #21293a;
+      border: 1px solid var(--elevated);
     }
-    .badge {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
+
+    .status-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
-    .b-bad { background: #f8514922; color: #ff7b72; border: 1px solid #f8514966; }
-    .b-warn { background: #d2992222; color: #e3b341; border: 1px solid #d2992266; }
-    .b-ok { background: #2ea04322; color: #3fb950; border: 1px solid #2ea04366; }
+    .status-icon svg { width: 16px; height: 16px; }
+    .st-bad { background: rgba(239, 68, 68, 0.15); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.45); }
+    .st-warn { background: rgba(245, 158, 11, 0.15); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.45); }
+    .st-ok { background: rgba(52, 211, 153, 0.15); color: var(--green); border: 1px solid rgba(52, 211, 153, 0.45); }
+
     ul { margin: 0; padding-left: 16px; }
     li { margin-bottom: 3px; }
-    .muted { color: #8b949e; font-size: 12px; }
+    .muted { color: var(--muted); font-size: 12px; }
   </style>
 </head>
 <body>
   <nav class="navbar">
-    <div class="brand">AEGISQRO · MONITOR DE DATOS</div>
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      AEGISQRO
+    </div>
     <div class="nav-links">
-      <a href="/dashboard" class="nav-btn">1. Cuenta, Grupos y Tokens</a>
-      <a href="/db" class="nav-btn active">2. Ver Datos que Llegan</a>
+      <a href="/dashboard" class="nav-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Cuentas y Tokens
+      </a>
+      <a href="/db" class="nav-btn active">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Datos Recibidos
+      </a>
     </div>
   </nav>
 
   <main class="container">
-    <!-- 1. Resumen Rapido de Conducta -->
     <section class="card">
       <div class="profile-header">
-        <div>
-          <h2>Perfil de Conducta Actual</h2>
-          <div id="conductSummary" style="font-size:14px; color:#c9d1d9;">Cargando...</div>
+        <div style="flex:1; min-width:260px;">
+          <h2>Perfil de Conducta UEBA</h2>
+          <div id="conductSummary" style="font-size:13.5px; color:var(--muted);">Cargando...</div>
         </div>
-        <div style="text-align:right;">
-          <div id="conductScore" class="score-big" style="color:#ff7b72;">0.00</div>
-          <span id="conductLevel" class="badge b-bad">CRITICAL</span>
+        <div class="score-pill">
+          <div id="conductIconWrap"></div>
+          <div>
+            <div class="muted" style="font-size:10.5px; text-transform:uppercase;">Score Riesgo</div>
+            <div id="conductScore" class="score-big">0.00</div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- 2. Archivos, Imagenes y URLs Recibidos -->
     <section class="card">
-      <h2>Archivos, Imagenes y Mensajes que Llegan (con Hora y Como se Detecto)</h2>
+      <h2>Archivos, Imagenes y Mensajes Analizados</h2>
       <div class="table-scroll">
-      <table>
-        <colgroup>
-          <col class="col-hora"><col class="col-disp"><col class="col-tipo"><col class="col-ver">
-          <col class="col-det"><col class="col-sha"><col class="col-tmp">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Hora</th>
-            <th>Dispositivo</th>
-            <th>Tipo</th>
-            <th>Veredicto</th>
-            <th>Como se detecto (Explicacion / LLM)</th>
-            <th>SHA-256</th>
-            <th>Temporal</th>
-          </tr>
-        </thead>
-        <tbody id="incomingBody"></tbody>
-      </table>
+        <table>
+          <colgroup>
+            <col class="col-hora"><col class="col-disp"><col class="col-tipo"><col class="col-ver">
+            <col class="col-det"><col class="col-sha"><col class="col-tmp">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Dispositivo</th>
+              <th>Tipo</th>
+              <th style="text-align:center;">Estado</th>
+              <th>Como se detecto</th>
+              <th>SHA-256</th>
+              <th style="text-align:center;">Purga</th>
+            </tr>
+          </thead>
+          <tbody id="incomingBody"></tbody>
+        </table>
       </div>
     </section>
   </main>
 
   <script>
-    function bClass(val) {
+    const ICONS = {
+      shieldAlert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+      warnTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      shieldOk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>',
+      trashCheck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><polyline points="9 14 11 16 15 12"/></svg>'
+    };
+
+    function statusIconFor(val, score) {
       const v = String(val || "").toUpperCase();
+      const title = `${val} (${Number(score || 0).toFixed(2)})`;
       if (v.includes("MALICIOUS") || v.includes("CRITICAL") || v.includes("HIGH_RISK") || v.includes("PHISHING") || v.includes("BLOCKED")) {
-        return "badge b-bad";
+        return `<span class="status-icon st-bad" title="${title}">${ICONS.shieldAlert}</span>`;
       }
       if (v.includes("MEDIUM") || v.includes("HIGH") || v.includes("FLAGGED") || v.includes("SUSPICIOUS")) {
-        return "badge b-warn";
+        return `<span class="status-icon st-warn" title="${title}">${ICONS.warnTriangle}</span>`;
       }
-      return "badge b-ok";
+      return `<span class="status-icon st-ok" title="${title}">${ICONS.shieldOk}</span>`;
     }
 
     function fmtTime(iso) {
       if (!iso) return "-";
       const d = new Date(iso);
-      return d.toLocaleTimeString("es-MX", { hour12: false }) + " (" + d.toLocaleDateString("es-MX") + ")";
+      return d.toLocaleTimeString("es-MX", { hour12: false }) + "<br>" + d.toLocaleDateString("es-MX");
     }
 
     const PERM_NAMES = {
@@ -255,24 +315,31 @@
       const artifacts = await artsRes.json();
       const prof = await profRes.json();
 
+      const score = Number(prof.current_risk_score || 0);
       document.getElementById("conductSummary").textContent = prof.llm_behavioral_summary || "";
-      document.getElementById("conductScore").textContent = Number(prof.current_risk_score || 0).toFixed(2);
-      document.getElementById("conductLevel").className = bClass(prof.risk_level);
-      document.getElementById("conductLevel").textContent = prof.risk_level;
+      document.getElementById("conductScore").textContent = score.toFixed(2);
+      document.getElementById("conductScore").style.color =
+        score >= 0.8 ? "var(--red)" : (score >= 0.45 ? "var(--amber)" : "var(--green)");
+      document.getElementById("conductIconWrap").innerHTML = statusIconFor(prof.risk_level, score);
 
       document.getElementById("incomingBody").innerHTML = artifacts.map(a => `
         <tr>
           <td class="muted">${fmtTime(a.scanned_at)}</td>
           <td><span class="mono">${a.device_id}</span></td>
           <td><strong>${a.file_type}</strong><br><span class="muted">${a.detection_method}</span></td>
-          <td><span class="${bClass(a.verdict)}">${a.verdict} (${Number(a.threat_score).toFixed(2)})</span></td>
+          <td style="text-align:center;">
+            ${statusIconFor(a.verdict, a.threat_score)}
+            <div class="muted" style="font-size:11px;margin-top:2px;">${Number(a.threat_score).toFixed(2)}</div>
+          </td>
           <td>
             <ul>
               ${humanizeReasons(a.detection_reasons).map(r => `<li>${r}</li>`).join("")}
             </ul>
           </td>
-          <td><span class="mono" title="${a.artifact_sha256}">${(a.artifact_sha256 || "").slice(0, 12)}...</span></td>
-          <td><span class="badge b-ok">${a.ephemeral_purged ? "Borrado" : "Activo"}</span></td>
+          <td><span class="mono" title="${a.artifact_sha256}">${(a.artifact_sha256 || "").slice(0, 10)}...</span></td>
+          <td style="text-align:center;">
+            <span class="status-icon st-ok" title="Archivo temporal purgado">${ICONS.trashCheck}</span>
+          </td>
         </tr>
       `).join("") || '<tr><td colspan="7" class="muted">Aun no llegan archivos</td></tr>';
     }
