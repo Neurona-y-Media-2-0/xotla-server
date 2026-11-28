@@ -1641,17 +1641,58 @@
       return parts.join(" &nbsp;·&nbsp; ");
     }
 
+    let modalAllEvents = [];
+    let modalAllArtifacts = [];
+    let modalEventPage = 1;
+    const MODAL_PAGE_SIZE = 12;
+
+    function groupEventsByType(events) {
+      const groups = {};
+      events.forEach(e => {
+        const type = e.event_type || "UNKNOWN";
+        if (!groups[type]) {
+          groups[type] = {
+            type,
+            count: 0,
+            maxScore: 0,
+            riskLevel: e.risk_level || "INFO",
+            sources: new Set(),
+            devices: new Set(),
+            users: new Set(),
+            hosts: new Set(),
+            actions: new Set(),
+            findings: new Set(),
+            latestAt: e.received_at
+          };
+        }
+        const g = groups[type];
+        g.count++;
+        const score = Number(e.threat_score ?? 0);
+        if (score > g.maxScore) g.maxScore = score;
+        if (e.source) g.sources.add(e.source);
+        if (e.device_id) g.devices.add(e.device_id);
+        if (e.employee_id) g.users.add(e.employee_id);
+
+        const clean = getCleanIncidentSummary(e);
+        if (clean.target && clean.target !== "No especificado") g.hosts.add(clean.target);
+        if (clean.action) g.actions.add(clean.action);
+        if (clean.finding) g.findings.add(clean.finding);
+      });
+      return Object.values(groups).sort((a, b) => b.maxScore - a.maxScore || b.count - a.count);
+    }
+
     function renderIncidentModal(data) {
       const t = data.token || {};
       const s = data.summary || {};
-      const events = data.events || [];
-      const artifacts = data.artifacts || [];
+      modalAllEvents = data.events || [];
+      modalAllArtifacts = data.artifacts || [];
+      modalEventPage = 1;
 
       document.getElementById("incidentSubtitle").textContent =
         `${t.token_id || ""} · ${t.assigned_employee_id || "sin usuario"} · cuenta ${data.company_id || ""}`;
 
       const riskEntries = Object.entries(s.by_risk_level || {});
-      const typeEntries = Object.entries(s.by_event_type || {}).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const typeEntries = Object.entries(s.by_event_type || {}).sort((a, b) => b[1] - a[1]);
 
       const pill = (txt, color, bg) =>
         `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;color:${color};background:${bg};">${escapeHtml(txt)}</span>`;
@@ -1668,15 +1709,15 @@
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px;">
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Total Incidentes</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_incidents ?? 0}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_incidents ?? (modalAllEvents.length + modalAllArtifacts.length)}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Telemetria</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_events ?? 0}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_events ?? modalAllEvents.length}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Artefactos</div>
-            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_artifacts ?? 0}</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_artifacts ?? modalAllArtifacts.length}</div>
           </div>
           <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
             <div style="font-size:11px;color:#DC2626;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Maliciosos</div>
@@ -1698,60 +1739,92 @@
           <div style="margin-top:2px;"><strong>Dispositivos asociados:</strong> ${escapeHtml((data.devices || []).join(", ") || "ninguno")} &nbsp;·&nbsp; <strong>Plataforma:</strong> ${escapeHtml(t.platform || "browser / multi")}</div>
         </div>`;
 
-      const riskBreakdown = riskEntries.length
-        ? `<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><strong style="font-size:12px;color:#334155;">Por severidad:</strong> ${riskEntries.map(([k, v]) => { const [c, b, lbl] = riskColor(k); return pill(`${lbl}: ${v}`, c, b); }).join(" ")}</div>`
-        : "";
+      // 1. Matriz de Amenazas Consolidadas
+      const groups = groupEventsByType(modalAllEvents);
+      let threatMatrixTable = '<p style="color:#94A3B8;padding:12px;">Sin eventos registrados para este token.</p>';
+      if (groups.length) {
+        threatMatrixTable = `
+          <div style="overflow-x:auto; border:1px solid #E2E8F0; border-radius:8px; margin-bottom:18px;">
+            <table style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;">
+              <thead>
+                <tr style="background:#F1F5F9; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
+                  <th style="padding:10px 14px;">Tipo de Amenaza</th>
+                  <th style="padding:10px 14px;">Severidad</th>
+                  <th style="padding:10px 14px; text-align:center;">Detecciones</th>
+                  <th style="padding:10px 14px;">Dominios / Objetivos Afectados</th>
+                  <th style="padding:10px 14px;">Accion de Seguridad</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${groups.map(g => {
+                  const [c, b, lvlLabel] = riskColor(g.riskLevel);
+                  const hostsArr = Array.from(g.hosts);
+                  const hostsPreview = hostsArr.slice(0, 3).map(h => `<span style="font-family:monospace;color:#2563EB;">${escapeHtml(h)}</span>`).join(", ")
+                    + (hostsArr.length > 3 ? ` <span style="color:#64748B;">(+${hostsArr.length - 3} mas)</span>` : "") || "—";
+                  const actionsArr = Array.from(g.actions);
+                  const isBlocked = actionsArr.some(a => a.includes("BLOQ"));
+                  const actBg = isBlocked ? "#FEE2E2" : "#FEF3C7";
+                  const actCol = isBlocked ? "#DC2626" : "#B45309";
+                  const actText = isBlocked ? "BLOQUEADO" : "MARCADO / ALERTA";
 
-      const typeBreakdown = typeEntries.length
-        ? `<div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><strong style="font-size:12px;color:#334155;">Eventos detectados:</strong> ${typeEntries.map(([k, v]) => pill(`${humanizeEventType(k)}: ${v}`, "#0F2942", "#E2E8F0")).join(" ")}</div>`
-        : "";
-
-      let eventsTable = '<p style="color:#94A3B8;">Sin eventos de telemetria registrados para este token.</p>';
-      if (events.length) {
-        eventsTable = `
-          <div style="overflow-x:auto; border:1px solid #E2E8F0; border-radius:8px;">
-          <table style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;">
-            <thead><tr style="background:#F1F5F9; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
-              <th style="padding:10px 14px; white-space:nowrap;">Hora / Fecha</th>
-              <th style="padding:10px 14px; white-space:nowrap;">Nivel Riesgo</th>
-              <th style="padding:10px 14px; white-space:nowrap;">Amenaza y Origen</th>
-              <th style="padding:10px 14px; white-space:nowrap;">Dispositivo / Usuario</th>
-              <th style="padding:10px 14px;">Detalle de Seguridad (Accion y Objetivo)</th>
-            </tr></thead>
-            <tbody>
-            ${events.map(e => {
-              const [c, b, lvlLabel] = riskColor(e.risk_level);
-              const tPart = formatDateReadable(e.received_at);
-              const scoreVal = Number(e.threat_score ?? 0).toFixed(1);
-              return `<tr style="border-top:1px solid #F1F5F9;">
-                <td style="padding:10px 14px; white-space:nowrap;">
-                  <div style="font-weight:700; color:#0F172A; font-family:monospace; font-size:12.5px;">${tPart.time}</div>
-                  <div style="font-size:10.5px; color:#64748B;">${tPart.date}</div>
-                </td>
-                <td style="padding:10px 14px; white-space:nowrap;">
-                  <span class="pill" style="background:${b}; color:${c}; font-weight:700; font-size:11px;">
-                    ${lvlLabel} · ${scoreVal}
-                  </span>
-                </td>
-                <td style="padding:10px 14px; white-space:nowrap;">
-                  <div style="font-weight:600; color:#0F172A; font-size:13px;">${humanizeEventType(e.event_type)}</div>
-                  <div style="font-size:11px; color:#64748B; margin-top:2px;">${humanizeSource(e.source)}</div>
-                </td>
-                <td style="padding:10px 14px; white-space:nowrap;">
-                  <span class="id-chip" style="font-size:11.5px;">${escapeHtml(e.device_id || "Desconocido")}</span>
-                  <div style="font-size:11px; color:#64748B; margin-top:2px;">Usuario: <strong>${escapeHtml(e.employee_id || "General")}</strong></div>
-                </td>
-                <td style="padding:10px 14px; line-height:1.5; color:#1E293B; font-size:12.5px;">
-                  ${extractTelemetryDetails(e)}
-                </td>
-              </tr>`;
-            }).join("")}
-            </tbody>
-          </table></div>`;
+                  return `
+                    <tr style="border-top:1px solid #F1F5F9;">
+                      <td style="padding:11px 14px;">
+                        <strong style="color:#0F172A;font-size:13px;">${humanizeEventType(g.type)}</strong>
+                        <div style="font-size:11px;color:#64748B;margin-top:2px;">Origen: ${Array.from(g.sources).map(humanizeSource).join(", ")}</div>
+                      </td>
+                      <td style="padding:11px 14px;white-space:nowrap;">
+                        <span class="pill" style="background:${b};color:${c};font-weight:700;font-size:11px;">
+                          ${lvlLabel} · ${g.maxScore.toFixed(2)}
+                        </span>
+                      </td>
+                      <td style="padding:11px 14px;text-align:center;">
+                        <span style="font-size:14px;font-weight:700;color:#0F172A;">${g.count}</span>
+                        <div style="font-size:10.5px;color:#64748B;">eventos</div>
+                      </td>
+                      <td style="padding:11px 14px;line-height:1.4;">
+                        ${hostsPreview}
+                      </td>
+                      <td style="padding:11px 14px;white-space:nowrap;">
+                        <span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;background:${actBg};color:${actCol};">
+                          ${actText}
+                        </span>
+                      </td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
       }
 
+      // 2. Registro Cronologico con Busqueda y Paginacion
+      const filterBar = `
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+          <input type="text" id="incidentEventSearch" placeholder="Buscar por dominio, regla, dispositivo..."
+            style="flex:1; min-width:220px; background:#FFFFFF; border:1px solid #CBD5E1; color:#0F172A; padding:8px 12px; border-radius:7px; font-size:12.5px;"
+            oninput="applyIncidentFilters()" />
+          <select id="incidentEventRiskFilter"
+            style="background:#FFFFFF; border:1px solid #CBD5E1; color:#0F172A; padding:8px 12px; border-radius:7px; font-size:12.5px;"
+            onchange="applyIncidentFilters()">
+            <option value="ALL">Todas las severidades</option>
+            <option value="CRITICAL">Critico / Alto</option>
+            <option value="MEDIUM">Medio</option>
+            <option value="LOW">Bajo</option>
+          </select>
+          <select id="incidentEventTypeFilter"
+            style="background:#FFFFFF; border:1px solid #CBD5E1; color:#0F172A; padding:8px 12px; border-radius:7px; font-size:12.5px;"
+            onchange="applyIncidentFilters()">
+            <option value="ALL">Todos los tipos (${modalAllEvents.length})</option>
+            ${groups.map(g => `<option value="${escapeHtml(g.type)}">${escapeHtml(humanizeEventType(g.type))} (${g.count})</option>`).join("")}
+          </select>
+        </div>
+      `;
+
+      // 3. Artefactos escaneados
       let artifactsTable = '<p style="color:#94A3B8;">Sin artefactos escaneados registrados para este token.</p>';
-      if (artifacts.length) {
+      if (modalAllArtifacts.length) {
         artifactsTable = `
           <div style="overflow-x:auto; border:1px solid #E2E8F0; border-radius:8px;">
           <table style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;">
@@ -1763,7 +1836,7 @@
               <th style="padding:10px 14px;">Motivo de Deteccion</th>
             </tr></thead>
             <tbody>
-            ${artifacts.map(a => {
+            ${modalAllArtifacts.map(a => {
               const tPart = formatDateReadable(a.scanned_at);
               const reasons = humanizeReasons(a.detection_reasons).join(" · ") || a.detection_method || "Inspeccion heuristica";
               const isMal = /MALICIOUS|CRITICAL|HIGH/i.test(a.verdict);
@@ -1797,23 +1870,129 @@
           </table></div>`;
       }
 
-      const emptyNote = (!events.length && !artifacts.length)
+      const emptyNote = (!modalAllEvents.length && !modalAllArtifacts.length)
         ? `<div style="margin:14px 0;padding:12px 14px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;color:#15803D;font-size:13px;">Sin incidentes registrados para este token. No hay eventos ni artefactos vinculados en la base de datos.</div>`
         : "";
 
       document.getElementById("incidentBody").innerHTML = `
         ${meta}
         ${summaryCards}
-        ${riskBreakdown}
-        ${typeBreakdown}
         ${emptyNote}
-        <h4 style="margin:18px 0 10px;font-size:14px;font-weight:700;color:#0F172A;">Eventos de Telemetria (${events.length})</h4>
-        ${eventsTable}
-        <h4 style="margin:22px 0 10px;font-size:14px;font-weight:700;color:#0F172A;">Artefactos Escaneados (${artifacts.length})</h4>
+        <h4 style="margin:18px 0 10px;font-size:14px;font-weight:700;color:#0F172A;">1. Matriz de Amenazas Consolidadas (${groups.length} categorias)</h4>
+        ${threatMatrixTable}
+        <h4 style="margin:22px 0 10px;font-size:14px;font-weight:700;color:#0F172A;">2. Registro Cronologico de Telemetria (${modalAllEvents.length} eventos)</h4>
+        ${filterBar}
+        <div id="incidentEventsTableContainer"></div>
+        <h4 style="margin:26px 0 10px;font-size:14px;font-weight:700;color:#0F172A;">3. Artefactos Escaneados en Sandbox (${modalAllArtifacts.length})</h4>
         ${artifactsTable}
       `;
 
+      renderPaginatedIncidentEvents();
       document.getElementById("btnIncidentPdf").disabled = false;
+    }
+
+    function applyIncidentFilters() {
+      modalEventPage = 1;
+      renderPaginatedIncidentEvents();
+    }
+
+    function renderPaginatedIncidentEvents() {
+      const container = document.getElementById("incidentEventsTableContainer");
+      if (!container) return;
+
+      const q = (document.getElementById("incidentEventSearch")?.value || "").toLowerCase().trim();
+      const riskFilter = document.getElementById("incidentEventRiskFilter")?.value || "ALL";
+      const typeFilter = document.getElementById("incidentEventTypeFilter")?.value || "ALL";
+
+      const filtered = modalAllEvents.filter(e => {
+        if (typeFilter !== "ALL" && e.event_type !== typeFilter) return false;
+
+        const l = String(e.risk_level || "").toUpperCase();
+        if (riskFilter === "CRITICAL" && !l.includes("CRIT") && !l.includes("HIGH") && !l.includes("ALTO")) return false;
+        if (riskFilter === "MEDIUM" && !l.includes("MED") && !l.includes("WARN")) return false;
+        if (riskFilter === "LOW" && !l.includes("LOW") && !l.includes("BAJO")) return false;
+
+        if (q) {
+          const hay = `${e.event_type || ""} ${e.source || ""} ${e.device_id || ""} ${e.employee_id || ""} ${JSON.stringify(e.raw_payload || {})}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      if (!filtered.length) {
+        container.innerHTML = '<p style="color:#94A3B8;padding:12px 0;">No se encontraron eventos coincidentes con los filtros aplicados.</p>';
+        return;
+      }
+
+      const totalPages = Math.ceil(filtered.length / MODAL_PAGE_SIZE);
+      if (modalEventPage > totalPages) modalEventPage = totalPages;
+      if (modalEventPage < 1) modalEventPage = 1;
+
+      const start = (modalEventPage - 1) * MODAL_PAGE_SIZE;
+      const end = start + MODAL_PAGE_SIZE;
+      const pageEvents = filtered.slice(start, end);
+
+      const riskColor = (lvl) => {
+        const l = String(lvl || "").toUpperCase();
+        if (l.includes("CRIT") || l.includes("HIGH") || l.includes("ALTO")) return ["#DC2626", "#FEE2E2", "ALTO"];
+        if (l.includes("MED") || l.includes("WARN")) return ["#B45309", "#FEF3C7", "MEDIO"];
+        if (l.includes("LOW") || l.includes("BAJO")) return ["#15803D", "#DCFCE7", "BAJO"];
+        return ["#475569", "#F1F5F9", l || "INFO"];
+      };
+
+      const tableHtml = `
+        <div style="overflow-x:auto; border:1px solid #E2E8F0; border-radius:8px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;">
+          <thead><tr style="background:#F1F5F9; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
+            <th style="padding:10px 14px; white-space:nowrap;">Hora / Fecha</th>
+            <th style="padding:10px 14px; white-space:nowrap;">Nivel Riesgo</th>
+            <th style="padding:10px 14px; white-space:nowrap;">Amenaza y Origen</th>
+            <th style="padding:10px 14px; white-space:nowrap;">Dispositivo / Usuario</th>
+            <th style="padding:10px 14px;">Detalle de Seguridad (Accion y Objetivo)</th>
+          </tr></thead>
+          <tbody>
+          ${pageEvents.map(e => {
+            const [c, b, lvlLabel] = riskColor(e.risk_level);
+            const tPart = formatDateReadable(e.received_at);
+            const scoreVal = Number(e.threat_score ?? 0).toFixed(1);
+            return `<tr style="border-top:1px solid #F1F5F9;">
+              <td style="padding:10px 14px; white-space:nowrap;">
+                <div style="font-weight:700; color:#0F172A; font-family:monospace; font-size:12.5px;">${tPart.time}</div>
+                <div style="font-size:10.5px; color:#64748B;">${tPart.date}</div>
+              </td>
+              <td style="padding:10px 14px; white-space:nowrap;">
+                <span class="pill" style="background:${b}; color:${c}; font-weight:700; font-size:11px;">
+                  ${lvlLabel} · ${scoreVal}
+                </span>
+              </td>
+              <td style="padding:10px 14px; white-space:nowrap;">
+                <div style="font-weight:600; color:#0F172A; font-size:13px;">${humanizeEventType(e.event_type)}</div>
+                <div style="font-size:11px; color:#64748B; margin-top:2px;">${humanizeSource(e.source)}</div>
+              </td>
+              <td style="padding:10px 14px; white-space:nowrap;">
+                <span class="id-chip" style="font-size:11.5px;">${escapeHtml(e.device_id || "Desconocido")}</span>
+                <div style="font-size:11px; color:#64748B; margin-top:2px;">Usuario: <strong>${escapeHtml(e.employee_id || "General")}</strong></div>
+              </td>
+              <td style="padding:10px 14px; line-height:1.5; color:#1E293B; font-size:12.5px;">
+                ${extractTelemetryDetails(e)}
+              </td>
+            </tr>`;
+          }).join("")}
+          </tbody>
+        </table>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px; color:#64748B;">
+          <div>Mostrando <strong>${start + 1}</strong> a <strong>${Math.min(end, filtered.length)}</strong> de <strong>${filtered.length}</strong> eventos</div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button class="act-btn" style="width:auto; padding:4px 10px; border:1px solid #CBD5E1; font-size:12px;" ${modalEventPage <= 1 ? 'disabled style="opacity:0.5;"' : ''} onclick="modalEventPage--; renderPaginatedIncidentEvents();">&larr; Anterior</button>
+            <span style="font-weight:600; color:#0F172A;">Pagina ${modalEventPage} de ${totalPages}</span>
+            <button class="act-btn" style="width:auto; padding:4px 10px; border:1px solid #CBD5E1; font-size:12px;" ${modalEventPage >= totalPages ? 'disabled style="opacity:0.5;"' : ''} onclick="modalEventPage++; renderPaginatedIncidentEvents();">Siguiente &rarr;</button>
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = tableHtml;
     }
 
     /* ---------- PDF y Reporte Imprimible ---------- */
@@ -1964,16 +2143,21 @@
       lines.push(pdfSafe(`Amenazas Maliciosas:  ${s.malicious_artifacts ?? 0}`));
       lines.push(pdfSafe(`Nivel Maximo Amenaza: ${Number(s.max_threat_score ?? 0).toFixed(2)} / 1.00`));
 
-      const typeSummary = Object.entries(s.by_event_type || {})
-        .sort((a, b) => b[1] - a[1])
-        .map(([k, v]) => `  * ${humanizeEventType(k)}: ${v}`)
-        .slice(0, 6);
-      if (typeSummary.length) {
-        lines.push(pdfSafe("Desglose de Amenazas:"));
-        typeSummary.forEach(ts => lines.push(pdfSafe(ts)));
+      const groups = groupEventsByType(events);
+      if (groups.length) {
+        lines.push(pdfSafe(`MATRIZ DE AMENAZAS CONSOLIDADAS (${groups.length} CATEGORIAS)`));
+        lines.push(hr);
+        groups.forEach(g => {
+          const hostsArr = Array.from(g.hosts).slice(0, 4).join(", ") || "No especificado";
+          const isBlocked = Array.from(g.actions).some(a => a.includes("BLOQ"));
+          const act = isBlocked ? "BLOQUEADO" : "MARCADO / ALERTA";
+          lines.push(pdfSafe(`Amenaza:     ${humanizeEventType(g.type)}`));
+          lines.push(pdfSafe(`  Severidad: ${g.riskLevel} (${g.maxScore.toFixed(2)}) | Detecciones: ${g.count} eventos | Accion: ${act}`));
+          lines.push(pdfSafe(`  Objetivos: ${hostsArr}`));
+          lines.push(hr);
+        });
+        lines.push("");
       }
-      lines.push(hr);
-      lines.push("");
 
       if (events.length) {
         lines.push(pdfSafe(`REGISTRO AUDITABLE DE INCIDENTES DE TELEMETRIA (${events.length})`));
@@ -2105,7 +2289,39 @@
             <div class="kpi"><div class="kpi-lbl">Max. Amenaza</div><div class="kpi-val">${Number(s.max_threat_score ?? 0).toFixed(2)}</div></div>
           </div>
 
-          <h3 style="font-size:13px; margin:20px 0 8px; color:#0F172A; font-weight:700;">Eventos de Telemetria Registrados (${events.length})</h3>
+          <h3 style="font-size:13px; margin:20px 0 8px; color:#0F172A; font-weight:700;">1. Matriz de Amenazas Consolidadas (${groups.length} Categorias)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:200px;">Tipo de Amenaza</th>
+                <th style="width:90px;">Severidad</th>
+                <th style="width:90px; text-align:center;">Detecciones</th>
+                <th>Dominios / Objetivos Afectados</th>
+                <th style="width:110px;">Accion Tomada</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${groups.map(g => {
+                const isCrit = /CRIT|HIGH/i.test(g.riskLevel);
+                const pClass = isCrit ? 'pill-crit' : 'pill-warn';
+                const hostsArr = Array.from(g.hosts);
+                const hostsPreview = hostsArr.slice(0, 4).join(", ") + (hostsArr.length > 4 ? ` (+${hostsArr.length - 4} mas)` : "") || "—";
+                const isBlocked = Array.from(g.actions).some(a => a.includes("BLOQ"));
+                const actBadge = isBlocked ? '<span class="pill pill-crit">BLOQUEADO</span>' : '<span class="pill pill-warn">MARCADO</span>';
+                return `
+                  <tr>
+                    <td><strong>${escapeHtml(humanizeEventType(g.type))}</strong><br><span style="color:#64748B;">Origen: ${escapeHtml(Array.from(g.sources).map(humanizeSource).join(", "))}</span></td>
+                    <td><span class="pill ${pClass}">${escapeHtml(g.riskLevel)} · ${g.maxScore.toFixed(2)}</span></td>
+                    <td style="text-align:center;"><strong>${g.count}</strong> eventos</td>
+                    <td style="font-family:monospace; color:#2563EB;">${escapeHtml(hostsPreview)}</td>
+                    <td>${actBadge}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+
+          <h3 style="font-size:13px; margin:24px 0 8px; color:#0F172A; font-weight:700;">2. Registro Cronologico de Telemetria (${events.length} Eventos)</h3>
           <table>
             <thead>
               <tr>
