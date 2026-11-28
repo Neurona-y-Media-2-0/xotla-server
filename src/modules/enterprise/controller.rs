@@ -268,12 +268,12 @@ pub async fn portal_update_sites_handler(
     {
         let mut global_policy = state.policy.write().await;
         global_policy.trusted_download_hosts = clean_allowed.clone();
-        for b in &clean_blacklisted {
-            if !global_policy.protected_domains.contains(b) {
-                global_policy.protected_domains.push(b.clone());
-            }
-        }
-        global_policy.version += 1;
+        global_policy.blacklisted_sites = clean_blacklisted.clone();
+        global_policy.blocked_domains = clean_blacklisted.clone();
+        global_policy
+            .protected_domains
+            .retain(|d| !clean_blacklisted.iter().any(|b| b == d || d.ends_with(&format!(".{}", b))));
+        global_policy.version = saved.version;
     }
 
     Ok(Json(json!({

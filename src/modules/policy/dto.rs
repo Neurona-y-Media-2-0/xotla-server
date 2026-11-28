@@ -7,6 +7,10 @@ pub struct ExtensionPolicy {
     pub trusted_download_hosts: Vec<String>,
     pub protected_domains: Vec<String>,
     pub dangerous_extensions: Vec<String>,
+    #[serde(default)]
+    pub blacklisted_sites: Vec<String>,
+    #[serde(default)]
+    pub blocked_domains: Vec<String>,
 }
 
 impl Default for ExtensionPolicy {
@@ -33,6 +37,8 @@ impl Default for ExtensionPolicy {
             .into_iter()
             .map(String::from)
             .collect(),
+            blacklisted_sites: Vec::new(),
+            blocked_domains: Vec::new(),
         }
     }
 }
@@ -42,6 +48,8 @@ pub struct UpdatePolicyRequest {
     pub trusted_download_hosts: Option<Vec<String>>,
     pub protected_domains: Option<Vec<String>>,
     pub dangerous_extensions: Option<Vec<String>>,
+    pub blacklisted_sites: Option<Vec<String>>,
+    pub blocked_domains: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

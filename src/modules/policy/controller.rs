@@ -15,9 +15,40 @@ use crate::{
 
 pub async fn get_public_policy_handler(
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Json<ExtensionPolicy> {
-    let policy = state.policy.read().await;
-    Json(policy.clone())
+    let token_id = headers
+        .get("x-session-token")
+        .or_else(|| headers.get("x-token"))
+        .or_else(|| headers.get("x-portal-token"))
+        .or_else(|| headers.get(header::AUTHORIZATION))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").trim());
+
+    let company_id = token_id
+        .and_then(|tid| state.db.find_enterprise_token_by_id(tid))
+        .map(|t| t.company_id)
+        .unwrap_or_else(|| "comp_aegis_qro_01".to_string());
+
+    let site_policy = state.db.load_company_site_policy(&company_id);
+
+    let mut policy = state.policy.read().await.clone();
+    if !site_policy.allowed_sites.is_empty() {
+        policy.trusted_download_hosts = site_policy.allowed_sites;
+    }
+    policy.blacklisted_sites = site_policy.blacklisted_sites.clone();
+    policy.blocked_domains = site_policy.blacklisted_sites.clone();
+
+    // Ensure blacklisted sites are removed from protected_domains
+    policy
+        .protected_domains
+        .retain(|d| !site_policy.blacklisted_sites.iter().any(|b| b == d || d.ends_with(&format!(".{}", b))));
+
+    if site_policy.version > policy.version {
+        policy.version = site_policy.version;
+    }
+
+    Json(policy)
 }
 
 pub async fn admin_login_handler(

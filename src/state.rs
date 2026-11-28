@@ -61,6 +61,20 @@ impl AppState {
             portal_sessions.insert(tok, cid);
         }
 
+        let initial_site_policy = db.load_company_site_policy("comp_aegis_qro_01");
+        let mut initial_policy = ExtensionPolicy::default();
+        if !initial_site_policy.allowed_sites.is_empty() {
+            initial_policy.trusted_download_hosts = initial_site_policy.allowed_sites;
+        }
+        initial_policy.blacklisted_sites = initial_site_policy.blacklisted_sites.clone();
+        initial_policy.blocked_domains = initial_site_policy.blacklisted_sites.clone();
+        initial_policy
+            .protected_domains
+            .retain(|d| !initial_site_policy.blacklisted_sites.iter().any(|b| b == d || d.ends_with(&format!(".{}", b))));
+        if initial_site_policy.version > initial_policy.version {
+            initial_policy.version = initial_site_policy.version;
+        }
+
         let state = Self {
             config,
             db,
@@ -70,7 +84,7 @@ impl AppState {
             active_ws_sessions: Arc::new(DashMap::new()),
             profiles: Arc::new(DashMap::new()),
             events: Arc::new(RwLock::new(initial_events)),
-            policy: Arc::new(RwLock::new(ExtensionPolicy::default())),
+            policy: Arc::new(RwLock::new(initial_policy)),
             policy_audit_log: Arc::new(RwLock::new(Vec::new())),
             admin_sessions: Arc::new(DashMap::new()),
             portal_sessions,

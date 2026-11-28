@@ -71,6 +71,14 @@ pub async fn update_policy(
         changed = true;
     }
 
+    if let Some(ref blacklisted) = req.blacklisted_sites.as_ref().or(req.blocked_domains.as_ref()) {
+        let valid = sanitize_list(blacklisted, is_valid_hostname, true)
+            .ok_or_else(|| "Invalid blacklisted_sites list".to_string())?;
+        current.blacklisted_sites = valid.clone();
+        current.blocked_domains = valid;
+        changed = true;
+    }
+
     if !changed {
         return Err("No valid policy fields provided".to_string());
     }
