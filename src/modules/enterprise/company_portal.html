@@ -920,7 +920,7 @@
 
   <!-- Modal de incidentes por token -->
   <div id="incidentModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,23,42,0.55); align-items:flex-start; justify-content:center; padding:5vh 16px; overflow:auto;">
-    <div style="background:#FFFFFF; border-radius:12px; max-width:920px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.25); overflow:hidden;">
+    <div style="background:#FFFFFF; border-radius:12px; max-width:1100px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.25); overflow:hidden;">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid #E2E8F0; background:#F8FAFC;">
         <div style="display:flex; align-items:center; gap:10px; min-width:0;">
           <span style="color:#B45309; width:22px; height:22px; display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
@@ -1530,6 +1530,116 @@
       }
     }
 
+    function humanizeEventType(type) {
+      const t = String(type || "").trim().toUpperCase();
+      const map = {
+        INSECURE_COOKIE_DETECTED: "Cookie Insegura (Sin Cifrar)",
+        CREDENTIAL_EXPOSURE_BLOCKED: "Exposicion de Credenciales",
+        CLIPBOARD_HIJACK_BLOCKED: "Secuestro de Portapapeles",
+        SUBDOMAIN_SPOOFING_BLOCKED: "Suplantacion de Subdominio",
+        DANGEROUS_DOWNLOAD_BLOCKED: "Descarga Peligrosa Bloqueada",
+        MALICIOUS_DOWNLOAD_BLOCKED: "Descarga Maliciosa Bloqueada",
+        SUSPICIOUS_EXTENSION_FLAGGED: "Extension Sospechosa",
+        PHISHING_URL_DETECTED: "URL de Phishing Detectada",
+        PHISHING_URL_BLOCKED: "URL de Phishing Bloqueada",
+        HIGH_RISK: "Riesgo Alto en Aplicacion",
+        MEDIUM_RISK: "Riesgo Medio en Aplicacion",
+        CLEAN: "Analisis Limpio",
+        SUSPICIOUS_EXECUTION: "Ejecucion Sospechosa",
+        DOUBLE_EXTENSION: "Doble Extension Oculta"
+      };
+      if (map[t]) return map[t];
+      return t.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function humanizeSource(src) {
+      const s = String(src || "").trim().toUpperCase();
+      if (s.includes("BROWSER") || s.includes("EXTENSION")) return "Extension Web";
+      if (s.includes("WIN")) return "Agente Windows";
+      if (s.includes("ANDR")) return "Agente Android";
+      return src || "Dispositivo";
+    }
+
+    function formatDateReadable(isoStr) {
+      if (!isoStr) return { time: "—", date: "" };
+      try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return { time: isoStr, date: "" };
+        const time = d.toLocaleTimeString("es-MX", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        const date = d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+        return { time, date };
+      } catch (_) {
+        return { time: isoStr, date: "" };
+      }
+    }
+
+    function extractTelemetryDetails(e) {
+      let p = e.raw_payload;
+      if (typeof p === "string") {
+        try { p = JSON.parse(p); } catch (_) { return escapeHtml(p); }
+      }
+      p = p || {};
+      const d = p.details || {};
+      const parts = [];
+
+      const action = d.action_taken || p.action_taken || p.action;
+      if (action) {
+        const isBlocked = /BLOCK|PREVENT|DENY/i.test(action);
+        const isFlag = /FLAG|WARN|ALERT/i.test(action);
+        const bg = isBlocked ? "#FEE2E2" : (isFlag ? "#FEF3C7" : "#F1F5F9");
+        const color = isBlocked ? "#DC2626" : (isFlag ? "#B45309" : "#475569");
+        const actLabel = isBlocked ? "BLOQUEADO" : (isFlag ? "MARCADO" : action);
+        parts.push(`<span style="display:inline-block;padding:2px 7px;border-radius:4px;font-size:10.5px;font-weight:700;background:${bg};color:${color};">${actLabel}</span>`);
+      }
+
+      const host = d.host || d.domain || (d.original_url ? new URL(d.original_url).hostname : null);
+      if (host) {
+        parts.push(`<span style="font-weight:600;color:#0F172A;">Dominio:</span> <span style="font-family:monospace;color:#2563EB;">${escapeHtml(host)}</span>`);
+      }
+
+      if (d.file) {
+        const fname = d.file.name || d.file.filename || "";
+        const dbl = d.file.double_extension ? " (Doble Extension Oculta)" : "";
+        parts.push(`<span style="font-weight:600;color:#0F172A;">Archivo:</span> <span style="font-family:monospace;color:#DC2626;">${escapeHtml(fname)}${dbl}</span>`);
+      }
+
+      if (d.indicator) {
+        const indMap = {
+          "no_secure": "Falta flag Secure (transmision en texto plano)",
+          "no_httponly": "Falta flag HttpOnly (vulnerable a robo por script)",
+          "no_httponly,no_secure": "Sin flags de seguridad (HttpOnly y Secure ausentes)"
+        };
+        const indText = indMap[d.indicator] || d.indicator;
+        parts.push(`<span style="font-size:11.5px;color:#64748B;">Motivo: ${escapeHtml(indText)}</span>`);
+      }
+
+      if (p.artifact_name) {
+        parts.push(`<span style="font-weight:600;color:#0F172A;">App:</span> <span style="font-family:monospace;color:#1E293B;">${escapeHtml(p.artifact_name)}</span>`);
+      }
+      if (Array.isArray(p.requested_permissions) && p.requested_permissions.length) {
+        const perms = p.requested_permissions.slice(0, 2).map(r => {
+          if (r.includes("MANAGE_DEVICE_POLICY_CAMERA") || r.includes("sensor=camera") || r.includes(".CAMERA")) return "Intento de activar Camara";
+          if (r.includes("READ_SMS") || r.includes("RECEIVE_SMS")) return "Acceso no autorizado a SMS";
+          if (r.includes("ACCESS_FINE_LOCATION")) return "Rastreo de Ubicacion GPS";
+          if (r.includes("SYSTEM_ALERT_WINDOW")) return "Ventana de Phishing Superpuesta";
+          if (r.includes("RECORD_AUDIO")) return "Activacion de Microfono";
+          return r.replace(/^Background app holds sensitive permission:\s*/i, "");
+        }).join(" · ");
+        parts.push(`<span style="font-size:11.5px;color:#DC2626;">Permisos: ${escapeHtml(perms)}</span>`);
+      }
+
+      if (!parts.length) {
+        const rule = p.rule || d.rule || d.detected_script || p.reason;
+        if (rule) {
+          parts.push(`<span style="color:#475569;">Regla: ${escapeHtml(rule)}</span>`);
+        } else {
+          parts.push('<span style="color:#94A3B8;">Evento de telemetria verificado</span>');
+        }
+      }
+
+      return parts.join(" &nbsp;·&nbsp; ");
+    }
+
     function renderIncidentModal(data) {
       const t = data.token || {};
       const s = data.summary || {};
@@ -1547,79 +1657,92 @@
 
       const riskColor = (lvl) => {
         const l = String(lvl || "").toUpperCase();
-        if (l.includes("CRIT") || l.includes("HIGH") || l.includes("ALTO")) return ["#DC2626", "#FEE2E2"];
-        if (l.includes("MED") || l.includes("WARN")) return ["#B45309", "#FEF3C7"];
-        if (l.includes("LOW") || l.includes("BAJO")) return ["#1D4ED8", "#DBEAFE"];
-        return ["#475569", "#F1F5F9"];
+        if (l.includes("CRIT") || l.includes("HIGH") || l.includes("ALTO")) return ["#DC2626", "#FEE2E2", "ALTO"];
+        if (l.includes("MED") || l.includes("WARN")) return ["#B45309", "#FEF3C7", "MEDIO"];
+        if (l.includes("LOW") || l.includes("BAJO")) return ["#15803D", "#DCFCE7", "BAJO"];
+        return ["#475569", "#F1F5F9", l || "INFO"];
       };
 
       const summaryCards = `
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px;">
-          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
-            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Total incidentes</div>
-            <div style="font-size:22px;font-weight:700;color:#0F172A;">${s.total_incidents ?? 0}</div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px;">
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Total Incidentes</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_incidents ?? 0}</div>
           </div>
-          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
-            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Eventos telemetría</div>
-            <div style="font-size:22px;font-weight:700;color:#0F172A;">${s.total_events ?? 0}</div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Telemetria</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_events ?? 0}</div>
           </div>
-          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
-            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Artefactos</div>
-            <div style="font-size:22px;font-weight:700;color:#0F172A;">${s.total_artifacts ?? 0}</div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Artefactos</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${s.total_artifacts ?? 0}</div>
           </div>
-          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
-            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Maliciosos</div>
-            <div style="font-size:22px;font-weight:700;color:#DC2626;">${s.malicious_artifacts ?? 0}</div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#DC2626;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Maliciosos</div>
+            <div style="font-size:24px;font-weight:700;color:#DC2626;margin-top:2px;">${s.malicious_artifacts ?? 0}</div>
           </div>
-          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
-            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Máx. amenaza</div>
-            <div style="font-size:22px;font-weight:700;color:#0F172A;">${Number(s.max_threat_score ?? 0).toFixed(1)}</div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Max. Amenaza</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${Number(s.max_threat_score ?? 0).toFixed(1)}</div>
           </div>
-          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FAFC;">
-            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">Máx. riesgo</div>
-            <div style="font-size:22px;font-weight:700;color:#0F172A;">${Number(s.max_current_risk_score ?? 0).toFixed(1)}</div>
+          <div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 14px;background:#F8FAFC;">
+            <div style="font-size:11px;color:#64748B;font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Max. Riesgo</div>
+            <div style="font-size:24px;font-weight:700;color:#0F172A;margin-top:2px;">${Number(s.max_current_risk_score ?? 0).toFixed(1)}</div>
           </div>
         </div>`;
 
       const meta = `
-        <div style="font-size:12px;color:#475569;margin-bottom:14px;line-height:1.6;">
-          <div><strong>Token:</strong> ${escapeHtml(t.token_id || "")} · <strong>Estado:</strong> ${escapeHtml(t.status || "")} · <strong>Cuenta:</strong> ${escapeHtml(data.company_id || "")}</div>
-          <div><strong>Usuario:</strong> ${escapeHtml(t.assigned_employee_id || "sin asignar")} · <strong>Plataforma:</strong> ${escapeHtml(t.platform || "")} · <strong>Etiqueta:</strong> ${escapeHtml(t.client_label || "")}</div>
-          <div><strong>Dispositivos:</strong> ${escapeHtml((data.devices || []).join(", ") || "ninguno")}</div>
-          <div><strong>Primer registro:</strong> ${escapeHtml(s.first_seen || "—")} · <strong>Último registro:</strong> ${escapeHtml(s.last_seen || "—")}</div>
+        <div style="font-size:12.5px;color:#475569;margin-bottom:14px;line-height:1.6;background:#F8FAFC;padding:12px 14px;border-radius:8px;border:1px solid #E2E8F0;">
+          <div><strong>Token:</strong> <span class="id-chip">${escapeHtml(t.token_id || "")}</span> &nbsp;·&nbsp; <strong>Usuario:</strong> <strong>${escapeHtml(t.assigned_employee_id || "sin asignar")}</strong> &nbsp;·&nbsp; <strong>Estado:</strong> ${escapeHtml(t.status || "")}</div>
+          <div style="margin-top:2px;"><strong>Dispositivos asociados:</strong> ${escapeHtml((data.devices || []).join(", ") || "ninguno")} &nbsp;·&nbsp; <strong>Plataforma:</strong> ${escapeHtml(t.platform || "browser / multi")}</div>
         </div>`;
 
       const riskBreakdown = riskEntries.length
-        ? `<div style="margin-bottom:12px;"><strong style="font-size:12px;">Por nivel de riesgo:</strong> ${riskEntries.map(([k, v]) => { const [c, b] = riskColor(k); return pill(`${k}: ${v}`, c, b); }).join(" ")}</div>`
+        ? `<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><strong style="font-size:12px;color:#334155;">Por severidad:</strong> ${riskEntries.map(([k, v]) => { const [c, b, lbl] = riskColor(k); return pill(`${lbl}: ${v}`, c, b); }).join(" ")}</div>`
         : "";
 
       const typeBreakdown = typeEntries.length
-        ? `<div style="margin-bottom:14px;"><strong style="font-size:12px;">Tipos de evento:</strong> ${typeEntries.map(([k, v]) => pill(`${k}: ${v}`, "#475569", "#F1F5F9")).join(" ")}</div>`
+        ? `<div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><strong style="font-size:12px;color:#334155;">Eventos detectados:</strong> ${typeEntries.map(([k, v]) => pill(`${humanizeEventType(k)}: ${v}`, "#0F2942", "#E2E8F0")).join(" ")}</div>`
         : "";
 
-      let eventsTable = '<p style="color:#94A3B8;">Sin eventos de telemetría registrados para este token.</p>';
+      let eventsTable = '<p style="color:#94A3B8;">Sin eventos de telemetria registrados para este token.</p>';
       if (events.length) {
         eventsTable = `
-          <div style="overflow:auto; border:1px solid #E2E8F0; border-radius:8px;">
-          <table style="width:100%; border-collapse:collapse; font-size:12px;">
-            <thead><tr style="background:#F8FAFC; text-align:left;">
-              <th style="padding:8px;">Fecha</th><th style="padding:8px;">Riesgo</th><th style="padding:8px;">Tipo</th>
-              <th style="padding:8px;">Fuente</th><th style="padding:8px;">Dispositivo</th><th style="padding:8px;">Usuario</th>
-              <th style="padding:8px;text-align:right;">Amenaza</th><th style="padding:8px;text-align:right;">Riesgo</th><th style="padding:8px;">Evento</th>
+          <div style="overflow-x:auto; border:1px solid #E2E8F0; border-radius:8px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;">
+            <thead><tr style="background:#F1F5F9; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
+              <th style="padding:10px 14px; white-space:nowrap;">Hora / Fecha</th>
+              <th style="padding:10px 14px; white-space:nowrap;">Nivel Riesgo</th>
+              <th style="padding:10px 14px; white-space:nowrap;">Amenaza y Origen</th>
+              <th style="padding:10px 14px; white-space:nowrap;">Dispositivo / Usuario</th>
+              <th style="padding:10px 14px;">Detalle de Seguridad (Accion y Objetivo)</th>
             </tr></thead>
             <tbody>
             ${events.map(e => {
-              const [c, b] = riskColor(e.risk_level);
+              const [c, b, lvlLabel] = riskColor(e.risk_level);
+              const tPart = formatDateReadable(e.received_at);
+              const scoreVal = Number(e.threat_score ?? 0).toFixed(1);
               return `<tr style="border-top:1px solid #F1F5F9;">
-                <td style="padding:8px;white-space:nowrap;">${escapeHtml(e.received_at || "")}</td>
-                <td style="padding:8px;">${pill(e.risk_level || "?", c, b)}</td>
-                <td style="padding:8px;">${escapeHtml(e.event_type || "")}</td>
-                <td style="padding:8px;">${escapeHtml(e.source || "")}</td>
-                <td style="padding:8px;">${escapeHtml(e.device_id || "")}</td>
-                <td style="padding:8px;">${escapeHtml(e.employee_id || "")}</td>
-                <td style="padding:8px;text-align:right;">${Number(e.threat_score ?? 0).toFixed(1)}</td>
-                <td style="padding:8px;text-align:right;">${Number(e.current_risk_score ?? 0).toFixed(1)}</td>
-                <td style="padding:8px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(JSON.stringify(e.raw_payload ?? {}))}">${escapeHtml(JSON.stringify(e.raw_payload ?? {}))}</td>
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <div style="font-weight:700; color:#0F172A; font-family:monospace; font-size:12.5px;">${tPart.time}</div>
+                  <div style="font-size:10.5px; color:#64748B;">${tPart.date}</div>
+                </td>
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <span class="pill" style="background:${b}; color:${c}; font-weight:700; font-size:11px;">
+                    ${lvlLabel} · ${scoreVal}
+                  </span>
+                </td>
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <div style="font-weight:600; color:#0F172A; font-size:13px;">${humanizeEventType(e.event_type)}</div>
+                  <div style="font-size:11px; color:#64748B; margin-top:2px;">${humanizeSource(e.source)}</div>
+                </td>
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <span class="id-chip" style="font-size:11.5px;">${escapeHtml(e.device_id || "Desconocido")}</span>
+                  <div style="font-size:11px; color:#64748B; margin-top:2px;">Usuario: <strong>${escapeHtml(e.employee_id || "General")}</strong></div>
+                </td>
+                <td style="padding:10px 14px; line-height:1.5; color:#1E293B; font-size:12.5px;">
+                  ${extractTelemetryDetails(e)}
+                </td>
               </tr>`;
             }).join("")}
             </tbody>
@@ -1629,25 +1752,46 @@
       let artifactsTable = '<p style="color:#94A3B8;">Sin artefactos escaneados registrados para este token.</p>';
       if (artifacts.length) {
         artifactsTable = `
-          <div style="overflow:auto; border:1px solid #E2E8F0; border-radius:8px;">
-          <table style="width:100%; border-collapse:collapse; font-size:12px;">
-            <thead><tr style="background:#F8FAFC; text-align:left;">
-              <th style="padding:8px;">Fecha</th><th style="padding:8px;">Veredicto</th><th style="padding:8px;">Tipo</th>
-              <th style="padding:8px;">SHA-256</th><th style="padding:8px;">Dispositivo</th><th style="padding:8px;">Usuario</th>
-              <th style="padding:8px;text-align:right;">Amenaza</th><th style="padding:8px;">Método</th><th style="padding:8px;">Motivos</th>
+          <div style="overflow-x:auto; border:1px solid #E2E8F0; border-radius:8px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12.5px; text-align:left;">
+            <thead><tr style="background:#F1F5F9; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.04em;">
+              <th style="padding:10px 14px; white-space:nowrap;">Hora / Fecha</th>
+              <th style="padding:10px 14px; white-space:nowrap;">Veredicto</th>
+              <th style="padding:10px 14px; white-space:nowrap;">Archivo / SHA-256</th>
+              <th style="padding:10px 14px; white-space:nowrap;">Dispositivo / Usuario</th>
+              <th style="padding:10px 14px;">Motivo de Deteccion</th>
             </tr></thead>
             <tbody>
-            ${artifacts.map(a => `<tr style="border-top:1px solid #F1F5F9;">
-                <td style="padding:8px;white-space:nowrap;">${escapeHtml(a.scanned_at || "")}</td>
-                <td style="padding:8px;">${escapeHtml(a.verdict || "")}</td>
-                <td style="padding:8px;">${escapeHtml(a.file_type || "")}</td>
-                <td style="padding:8px;font-family:monospace;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(a.artifact_sha256 || "")}">${escapeHtml(a.artifact_sha256 || "")}</td>
-                <td style="padding:8px;">${escapeHtml(a.device_id || "")}</td>
-                <td style="padding:8px;">${escapeHtml(a.employee_id || "")}</td>
-                <td style="padding:8px;text-align:right;">${Number(a.threat_score ?? 0).toFixed(1)}</td>
-                <td style="padding:8px;">${escapeHtml(a.detection_method || "")}</td>
-                <td style="padding:8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml((a.detection_reasons || []).join("; "))}">${escapeHtml((a.detection_reasons || []).join("; "))}</td>
-              </tr>`).join("")}
+            ${artifacts.map(a => {
+              const tPart = formatDateReadable(a.scanned_at);
+              const reasons = humanizeReasons(a.detection_reasons).join(" · ") || a.detection_method || "Inspeccion heuristica";
+              const isMal = /MALICIOUS|CRITICAL|HIGH/i.test(a.verdict);
+              const vColor = isMal ? "#DC2626" : "#15803D";
+              const vBg = isMal ? "#FEE2E2" : "#DCFCE7";
+              const shortSha = a.artifact_sha256 ? a.artifact_sha256.slice(0, 16) + "..." : "—";
+              return `<tr style="border-top:1px solid #F1F5F9;">
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <div style="font-weight:700; color:#0F172A; font-family:monospace; font-size:12.5px;">${tPart.time}</div>
+                  <div style="font-size:10.5px; color:#64748B;">${tPart.date}</div>
+                </td>
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <span class="pill" style="background:${vBg}; color:${vColor}; font-weight:700; font-size:11px;">
+                    ${escapeHtml(a.verdict || "CLEAN")} · ${Number(a.threat_score ?? 0).toFixed(1)}
+                  </span>
+                </td>
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <div style="font-weight:600; color:#0F172A;">${escapeHtml(a.file_type || "Binario")}</div>
+                  <div style="font-family:monospace; font-size:11px; color:#64748B;" title="${escapeHtml(a.artifact_sha256 || "")}">${shortSha}</div>
+                </td>
+                <td style="padding:10px 14px; white-space:nowrap;">
+                  <span class="id-chip" style="font-size:11.5px;">${escapeHtml(a.device_id || "")}</span>
+                  <div style="font-size:11px; color:#64748B; margin-top:2px;">Usuario: <strong>${escapeHtml(a.employee_id || "")}</strong></div>
+                </td>
+                <td style="padding:10px 14px; line-height:1.5; color:#1E293B; font-size:12.5px;">
+                  ${escapeHtml(reasons)}
+                </td>
+              </tr>`;
+            }).join("")}
             </tbody>
           </table></div>`;
       }
@@ -1662,9 +1806,9 @@
         ${riskBreakdown}
         ${typeBreakdown}
         ${emptyNote}
-        <h4 style="margin:16px 0 8px;font-size:13px;color:#0F172A;">Eventos de telemetría (${events.length})</h4>
+        <h4 style="margin:18px 0 10px;font-size:14px;font-weight:700;color:#0F172A;">Eventos de Telemetria (${events.length})</h4>
         ${eventsTable}
-        <h4 style="margin:18px 0 8px;font-size:13px;color:#0F172A;">Artefactos escaneados (${artifacts.length})</h4>
+        <h4 style="margin:22px 0 10px;font-size:14px;font-weight:700;color:#0F172A;">Artefactos Escaneados (${artifacts.length})</h4>
         ${artifactsTable}
       `;
 
