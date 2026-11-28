@@ -267,6 +267,36 @@
     .pill-gray  { background: #F1F5F9; color: #475569; }
     .pill-red   { background: #FEE2E2; color: #B91C1C; }
 
+    .icon-status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+    }
+    .icon-status svg {
+      width: 15px;
+      height: 15px;
+    }
+    .icon-status-active {
+      background: #DCFCE7;
+      color: #15803D;
+      border: 1px solid #BBF7D0;
+    }
+    .icon-status-inactive {
+      background: #FEE2E2;
+      color: #B91C1C;
+      border: 1px solid #FECACA;
+    }
+    .icon-status-pending {
+      background: #F1F5F9;
+      color: #475569;
+      border: 1px solid #E2E8F0;
+    }
+
     .act-btn {
       width: 30px;
       height: 30px;
@@ -421,6 +451,7 @@
   <script>
     const SVG = {
       checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+      ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
       clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
       eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
       copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
@@ -630,9 +661,12 @@
         const used = Number(t.used_devices_count || 0);
         const maxD = Number(t.max_devices || 2);
         const isActive = used > 0 || t.status === "ACTIVE";
-        const pill = isActive
-          ? `<span class="pill pill-green">${SVG.checkCircle} Activo</span>`
-          : `<span class="pill pill-gray">${SVG.clock} Disponible</span>`;
+        let pill = `<span class="icon-status icon-status-pending" title="Disponible">${SVG.clock}</span>`;
+        if (isActive) {
+          pill = `<span class="icon-status icon-status-active" title="Activo">${SVG.checkCircle}</span>`;
+        } else if (t.status === "REVOKED" || t.status === "SUSPENDED") {
+          pill = `<span class="icon-status icon-status-inactive" title="Inactivo">${SVG.ban}</span>`;
+        }
 
         const usageBadge = used >= maxD
           ? `<span class="pill pill-red" style="background:#FEF3C7;color:#B45309;">${used} / ${maxD} lleno</span>`

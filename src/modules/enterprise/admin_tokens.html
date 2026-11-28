@@ -249,6 +249,36 @@
       color: #B91C1C;
     }
 
+    .icon-status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+    }
+    .icon-status svg {
+      width: 15px;
+      height: 15px;
+    }
+    .icon-status-active {
+      background: #DCFCE7;
+      color: #15803D;
+      border: 1px solid #BBF7D0;
+    }
+    .icon-status-inactive {
+      background: #FEE2E2;
+      color: #B91C1C;
+      border: 1px solid #FECACA;
+    }
+    .icon-status-pending {
+      background: #F1F5F9;
+      color: #475569;
+      border: 1px solid #E2E8F0;
+    }
+
     .actions-row {
       display: inline-flex;
       align-items: center;
@@ -426,8 +456,8 @@
       document.getElementById("accountsBody").innerHTML = cachedAccounts.map(a => {
         const isActive = a.account_status === "ACTIVE";
         const statePill = isActive
-          ? `<span class="pill pill-green">${SVG.checkCircle} Activa</span>`
-          : `<span class="pill pill-red">${SVG.ban} Inhabilitada</span>`;
+          ? `<span class="icon-status icon-status-active" title="Activa">${SVG.checkCircle}</span>`
+          : `<span class="icon-status icon-status-inactive" title="Inactiva">${SVG.ban}</span>`;
 
         const keyCell = a.has_temp_password
           ? `<span class="key-icon" title="Contrasena temporal SHA-256 activa">${SVG.key}</span>`
@@ -455,11 +485,11 @@
       }).join("") || '<tr><td colspan="9" style="color:#94A3B8;">Sin cuentas registradas</td></tr>';
 
       document.getElementById("tokensBody").innerHTML = tokens.map(t => {
-        let pill = `<span class="pill pill-gray">${SVG.clock} Disponible</span>`;
+        let pill = `<span class="icon-status icon-status-pending" title="Disponible">${SVG.clock}</span>`;
         if (t.status === "ACTIVE") {
-          pill = `<span class="pill pill-green">${SVG.checkCircle} En uso</span>`;
+          pill = `<span class="icon-status icon-status-active" title="En uso">${SVG.checkCircle}</span>`;
         } else if (t.status === "SUSPENDED" || t.status === "REVOKED") {
-          pill = `<span class="pill pill-red">${SVG.ban} Suspendido</span>`;
+          pill = `<span class="icon-status icon-status-inactive" title="Inactivo">${SVG.ban}</span>`;
         }
         return `
           <tr>
