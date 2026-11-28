@@ -3,16 +3,41 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserDownloadFileMeta {
+    pub name: Option<String>,
+    pub ext: Option<String>,
+    #[serde(default)]
+    pub double_extension: bool,
+    pub mime: Option<String>,
+    pub referrer_host: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserDetails {
     pub original_url: String,
     pub punycode_url: String,
     pub detected_script: String,
     pub similarity_score: f32,
     pub action_taken: String,
+    pub host: Option<String>,
+    pub indicator: Option<String>,
+    pub file: Option<BrowserDownloadFileMeta>,
+    pub alerts_in_log: Option<u32>,
+    pub unread_alerts: Option<u32>,
+    pub pending_events: Option<u32>,
+    pub policy_age_min: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserTelemetryPayload {
+    pub event_id: Option<String>,
+    pub session_id: Option<String>,
+    pub install_id: Option<String>,
+    pub extension_version: Option<String>,
+    pub policy_version: Option<u64>,
+    pub utc_offset_min: Option<i32>,
+    pub severity: Option<String>,
+    pub rule: Option<String>,
     pub employee_id: Option<String>,
     pub device_id: Option<String>,
     pub timestamp: Option<String>,

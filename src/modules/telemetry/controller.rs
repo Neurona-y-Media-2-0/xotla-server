@@ -75,12 +75,44 @@ pub async fn browser_telemetry_handler(
         purge_ephemeral_artifact(&payload.details.original_url);
     }
 
-    let anomaly = format!(
-        "Intento de acceso a dominio con caracteres {} ({}) [sha256:{}]",
-        payload.details.detected_script,
-        payload.details.original_url,
-        &url_sha256[..12]
-    );
+    let file_name = payload
+        .details
+        .file
+        .as_ref()
+        .and_then(|f| f.name.as_deref())
+        .unwrap_or(&payload.details.original_url);
+
+    let rule_tag = payload.rule.as_deref().unwrap_or("wasm_browser_guard");
+    let sev_tag = payload.severity.as_deref().unwrap_or("high");
+    let indicator_extra = payload
+        .details
+        .indicator
+        .as_deref()
+        .map(|ind| format!(" · Indicador: {}", ind))
+        .unwrap_or_default();
+
+    let anomaly = if let Some(ref fmeta) = payload.details.file {
+        format!(
+            "[{} / {}] Descarga bloqueada '{}' (ext: {}, doble_ext: {}, host: {}){}",
+            sev_tag.to_uppercase(),
+            rule_tag,
+            fmeta.name.as_deref().unwrap_or(file_name),
+            fmeta.ext.as_deref().unwrap_or("-"),
+            fmeta.double_extension,
+            payload.details.host.as_deref().unwrap_or("-"),
+            indicator_extra
+        )
+    } else {
+        format!(
+            "[{} / {}] Dominio/Evento {} en '{}' (accion: {}){}",
+            sev_tag.to_uppercase(),
+            rule_tag,
+            payload.details.detected_script,
+            payload.details.original_url,
+            payload.details.action_taken,
+            indicator_extra
+        )
+    };
 
     let mut raw = serde_json::to_value(&payload).unwrap_or(Value::Null);
     if let Some(obj) = raw.as_object_mut() {
@@ -90,11 +122,19 @@ pub async fn browser_telemetry_handler(
 
     state.db.upsert_scanned_artifact(&ScannedArtifactRecord {
         artifact_sha256: url_sha256.clone(),
-        file_type: classify_file_extension(&payload.details.original_url),
-        detected_magic: payload.details.detected_script.clone(),
+        file_type: classify_file_extension(file_name),
+        detected_magic: format!(
+            "{} ({})",
+            payload.details.detected_script,
+            rule_tag
+        ),
         verdict: payload.details.action_taken.clone(),
         threat_score: payload.details.similarity_score,
-        detection_method: format!("WASM_BROWSER_{}", payload.event_type),
+        detection_method: format!(
+            "WASM_BROWSER_{} [v{}]",
+            payload.event_type,
+            payload.extension_version.as_deref().unwrap_or("1.4.0")
+        ),
         detection_reasons: vec![anomaly.clone()],
         device_id: device.device_id.clone(),
         employee_id: device.employee_id.clone(),

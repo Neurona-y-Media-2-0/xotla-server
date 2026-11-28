@@ -25,8 +25,10 @@ impl Default for ExtensionPolicy {
                 "aegisqro.internal".to_string(),
             ],
             dangerous_extensions: vec![
-                ".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".wsf", ".js", ".jse",
-                ".hta", ".scr", ".pif", ".reg", ".iso", ".img", ".vhd", ".lnk", ".jar", ".zip",
+                ".exe", ".com", ".msi", ".msp", ".bat", ".cmd", ".ps1", ".vbs", ".vbe",
+                ".wsf", ".wsh", ".js", ".jse", ".hta", ".scr", ".pif", ".cpl", ".reg",
+                ".iso", ".img", ".vhd", ".vhdx", ".lnk", ".jar", ".apk", ".dll", ".sys",
+                ".zip", ".rar", ".7z", ".tar", ".gz", ".cab", ".dmg", ".pkg", ".sh",
             ]
             .into_iter()
             .map(String::from)
