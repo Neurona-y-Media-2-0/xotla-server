@@ -5,7 +5,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use crate::modules::{
     devices::dto::{AgentKind, RegisteredDevice},
-    enterprise::dto::{EnterpriseAccount, EnterpriseClientToken},
+    enterprise::dto::{CompanySitePolicy, EnterpriseAccount, EnterpriseClientToken},
     scanner::dto::ScannedArtifactRecord,
     telemetry::dto::StoredTelemetryEvent,
 };
@@ -101,6 +101,14 @@ impl Database {
                 activated_at TEXT NOT NULL,
                 last_used_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS enterprise_site_policies (
+                company_id TEXT PRIMARY KEY,
+                version INTEGER NOT NULL DEFAULT 1,
+                allowed_sites_json TEXT NOT NULL,
+                blacklisted_sites_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             ",
         )
         .expect("Failed to initialize SQLite schema");
@@ -129,6 +137,116 @@ impl Database {
                 Utc::now().to_rfc3339()
             ],
         );
+    }
+
+    pub fn authenticate_company_login(&self, email: &str, password_sha256: &str) -> Option<EnterpriseAccount> {
+        let conn = self.connect();
+        let cid: Option<String> = conn
+            .query_row(
+                "SELECT company_id FROM enterprise_accounts
+                 WHERE LOWER(master_account_email) = LOWER(?1)
+                   AND temp_password_sha256 = ?2
+                   AND account_status = 'ACTIVE'",
+                params![email.trim(), password_sha256],
+                |r| r.get(0),
+            )
+            .ok();
+
+        cid.map(|id| self.load_enterprise_account(&id))
+    }
+
+    pub fn count_company_non_revoked_tokens(&self, company_id: &str) -> u32 {
+        let conn = self.connect();
+        conn.query_row(
+            "SELECT COUNT(*) FROM enterprise_client_tokens WHERE company_id = ?1",
+            params![company_id],
+            |r| r.get(0),
+        )
+        .unwrap_or(0)
+    }
+
+    pub fn delete_company_token(&self, company_id: &str, token_id: &str) -> bool {
+        let conn = self.connect();
+        conn.execute(
+            "DELETE FROM enterprise_client_tokens WHERE company_id = ?1 AND token_id = ?2",
+            params![company_id, token_id],
+        )
+        .map(|rows| rows > 0)
+        .unwrap_or(false)
+    }
+
+    pub fn load_company_site_policy(&self, company_id: &str) -> CompanySitePolicy {
+        let conn = self.connect();
+        conn.query_row(
+            "SELECT version, allowed_sites_json, blacklisted_sites_json
+             FROM enterprise_site_policies WHERE company_id = ?1",
+            params![company_id],
+            |row| {
+                let ver: u64 = row.get(0)?;
+                let allow_str: String = row.get(1)?;
+                let black_str: String = row.get(2)?;
+                let allowed_sites: Vec<String> =
+                    serde_json::from_str(&allow_str).unwrap_or_default();
+                let blacklisted_sites: Vec<String> =
+                    serde_json::from_str(&black_str).unwrap_or_default();
+                Ok(CompanySitePolicy {
+                    company_id: company_id.to_string(),
+                    version: ver,
+                    allowed_sites,
+                    blacklisted_sites,
+                })
+            },
+        )
+        .unwrap_or_else(|_| CompanySitePolicy {
+            company_id: company_id.to_string(),
+            version: 1,
+            allowed_sites: vec![
+                "tools.empresa.mx".to_string(),
+                "aegisqro.internal".to_string(),
+                "sat.gob.mx".to_string(),
+            ],
+            blacklisted_sites: vec![
+                "xn--sat-gob-mx-99a.com".to_string(),
+                "recolector-externo.evil.org".to_string(),
+            ],
+        })
+    }
+
+    pub fn save_company_site_policy(
+        &self,
+        company_id: &str,
+        allowed_sites: &[String],
+        blacklisted_sites: &[String],
+    ) -> CompanySitePolicy {
+        let current = self.load_company_site_policy(company_id);
+        let next_ver = current.version + 1;
+        let allow_json = serde_json::to_string(allowed_sites).unwrap_or_else(|_| "[]".to_string());
+        let black_json =
+            serde_json::to_string(blacklisted_sites).unwrap_or_else(|_| "[]".to_string());
+        let conn = self.connect();
+        let _ = conn.execute(
+            "INSERT INTO enterprise_site_policies (
+                company_id, version, allowed_sites_json, blacklisted_sites_json, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(company_id) DO UPDATE SET
+                version = excluded.version,
+                allowed_sites_json = excluded.allowed_sites_json,
+                blacklisted_sites_json = excluded.blacklisted_sites_json,
+                updated_at = excluded.updated_at",
+            params![
+                company_id,
+                next_ver,
+                allow_json,
+                black_json,
+                Utc::now().to_rfc3339()
+            ],
+        );
+        CompanySitePolicy {
+            company_id: company_id.to_string(),
+            version: next_ver,
+            allowed_sites: allowed_sites.to_vec(),
+            blacklisted_sites: blacklisted_sites.to_vec(),
+        }
     }
 
     pub fn load_all_enterprise_accounts(&self) -> Vec<EnterpriseAccount> {

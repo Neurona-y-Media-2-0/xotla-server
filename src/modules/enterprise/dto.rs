@@ -64,3 +64,23 @@ pub struct RevokeTokenRequest {
 pub struct ToggleAccountStatusRequest {
     pub status: Option<String>,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PortalLoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompanySitePolicy {
+    pub company_id: String,
+    pub version: u64,
+    pub allowed_sites: Vec<String>,
+    pub blacklisted_sites: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateCompanySitePolicyRequest {
+    pub allowed_sites: Vec<String>,
+    pub blacklisted_sites: Vec<String>,
+}

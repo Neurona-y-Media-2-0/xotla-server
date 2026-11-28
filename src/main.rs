@@ -9,7 +9,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::IntoResponse,
-    routing::{get, head, post, put},
+    routing::{delete, get, head, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -19,11 +19,14 @@ use crate::{
     modules::{
         devices::controller::{handshake_handler, list_devices_handler},
         enterprise::controller::{
-            create_enterprise_account_handler, delete_enterprise_account_handler,
-            edit_enterprise_account_handler, enterprise_admin_page_handler,
-            generate_temp_password_handler, get_enterprise_overview_handler,
-            issue_enterprise_token_handler, revoke_enterprise_token_handler,
-            toggle_enterprise_status_handler, update_enterprise_quota_handler,
+            company_portal_page_handler, create_enterprise_account_handler,
+            delete_enterprise_account_handler, edit_enterprise_account_handler,
+            enterprise_admin_page_handler, generate_temp_password_handler,
+            get_enterprise_overview_handler, issue_enterprise_token_handler,
+            portal_create_token_handler, portal_delete_token_handler, portal_login_handler,
+            portal_logout_handler, portal_me_handler, portal_update_sites_handler,
+            revoke_enterprise_token_handler, toggle_enterprise_status_handler,
+            update_enterprise_quota_handler,
         },
         phishing_ai::controller::analyze_phishing_handler,
         policy::controller::{
@@ -148,6 +151,14 @@ async fn main() {
             get(get_admin_policy_handler).put(put_admin_policy_handler),
         )
         .route("/demo-phishing", get(demo_phishing_page_handler))
+        .route("/portal", get(company_portal_page_handler))
+        .route("/empresa", get(company_portal_page_handler))
+        .route("/v1/portal/login", post(portal_login_handler))
+        .route("/v1/portal/logout", post(portal_logout_handler))
+        .route("/v1/portal/me", get(portal_me_handler))
+        .route("/v1/portal/tokens", post(portal_create_token_handler))
+        .route("/v1/portal/tokens/:token_id", delete(portal_delete_token_handler))
+        .route("/v1/portal/sites", put(portal_update_sites_handler))
         .route("/dashboard", get(enterprise_admin_page_handler))
         .route("/tokens", get(enterprise_admin_page_handler))
         .route("/soc", get(db_viewer_page_handler))

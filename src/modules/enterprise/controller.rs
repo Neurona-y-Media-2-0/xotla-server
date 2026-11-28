@@ -1,15 +1,19 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     response::Html,
     Json,
 };
+use chrono::Utc;
 use serde_json::{json, Value};
+use uuid::Uuid;
 use crate::{
+    db::sha256_hex,
     modules::enterprise::{
         dto::{
-            AllocateCompanyRequest, GenerateTempPasswordRequest, IssueClientTokenRequest,
-            RevokeTokenRequest, ToggleAccountStatusRequest,
+            AllocateCompanyRequest, EnterpriseClientToken, GenerateTempPasswordRequest,
+            IssueClientTokenRequest, PortalLoginRequest, RevokeTokenRequest,
+            ToggleAccountStatusRequest, UpdateCompanySitePolicyRequest,
         },
         service::{
             create_enterprise_account_with_pool, generate_temp_password, get_enterprise_account,
@@ -21,6 +25,211 @@ use crate::{
 
 pub async fn enterprise_admin_page_handler() -> Html<&'static str> {
     Html(include_str!("admin_tokens.html"))
+}
+
+pub async fn company_portal_page_handler() -> Html<&'static str> {
+    Html(include_str!("company_portal.html"))
+}
+
+fn resolve_portal_company(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<String, (StatusCode, Json<Value>)> {
+    let tok = headers
+        .get("x-portal-token")
+        .or_else(|| headers.get(header::AUTHORIZATION))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim_start_matches("Bearer ").trim().to_string())
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "Inicia sesion en el portal de empresa" })),
+            )
+        })?;
+
+    state
+        .portal_sessions
+        .get(&tok)
+        .map(|entry| entry.value().clone())
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "Sesion expirada, vuelve a iniciar sesion" })),
+            )
+        })
+}
+
+pub async fn portal_login_handler(
+    State(state): State<AppState>,
+    Json(req): Json<PortalLoginRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let pw_hash = sha256_hex(req.password.trim());
+    let account = state
+        .db
+        .authenticate_company_login(&req.email, &pw_hash)
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "Correo o contrasena invalidos (o cuenta inhabilitada)" })),
+            )
+        })?;
+
+    let portal_token = format!("portal_sess_{}", Uuid::new_v4().simple());
+    state
+        .portal_sessions
+        .insert(portal_token.clone(), account.company_id.clone());
+
+    Ok(Json(json!({
+        "status": "AUTHENTICATED",
+        "portal_token": portal_token,
+        "enterprise_account": account
+    })))
+}
+
+pub async fn portal_logout_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Json<Value> {
+    if let Some(tok) = headers
+        .get("x-portal-token")
+        .and_then(|v| v.to_str().ok())
+    {
+        state.portal_sessions.remove(tok.trim());
+    }
+    Json(json!({ "status": "LOGGED_OUT" }))
+}
+
+pub async fn portal_me_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let cid = resolve_portal_company(&state, &headers)?;
+    let account = state.db.load_enterprise_account(&cid);
+    let tokens = state.db.load_enterprise_tokens(&cid);
+    let site_policy = state.db.load_company_site_policy(&cid);
+    let total_tokens_created = state.db.count_company_non_revoked_tokens(&cid);
+
+    Ok(Json(json!({
+        "enterprise_account": account,
+        "total_tokens_in_pool": total_tokens_created,
+        "can_create_more": total_tokens_created < account.total_allocated_tokens,
+        "tokens": tokens,
+        "site_policy": site_policy
+    })))
+}
+
+pub async fn portal_delete_token_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(token_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let cid = resolve_portal_company(&state, &headers)?;
+    state.db.delete_company_token(&cid, &token_id);
+    let account = state.db.load_enterprise_account(&cid);
+    let tokens = state.db.load_enterprise_tokens(&cid);
+    let total_tokens_created = state.db.count_company_non_revoked_tokens(&cid);
+
+    Ok(Json(json!({
+        "status": "TOKEN_DELETED",
+        "enterprise_account": account,
+        "total_tokens_in_pool": total_tokens_created,
+        "tokens": tokens
+    })))
+}
+
+pub async fn portal_create_token_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let cid = resolve_portal_company(&state, &headers)?;
+    let account = state.db.load_enterprise_account(&cid);
+    let current_count = state.db.count_company_non_revoked_tokens(&cid);
+
+    if current_count >= account.total_allocated_tokens {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": format!(
+                    "Ya alcanzaste tu limite contratado ({}/{} tokens). Elimina uno existente para generar otro.",
+                    current_count, account.total_allocated_tokens
+                )
+            })),
+        ));
+    }
+
+    let seed = format!("{}:regen:{}", cid, Uuid::new_v4());
+    let tok_sha = sha256_hex(&seed);
+    let tok_id = format!("aegis_tok_{}", &tok_sha[..16]);
+    let now = Utc::now().to_rfc3339();
+
+    let new_tok = EnterpriseClientToken {
+        token_id: tok_id,
+        company_id: cid.clone(),
+        token_sha256: tok_sha,
+        assigned_device_id: None,
+        assigned_employee_id: None,
+        client_label: format!("Licencia #{}", current_count + 1),
+        platform: "UNASSIGNED".to_string(),
+        status: "AVAILABLE".to_string(),
+        activated_at: now.clone(),
+        last_used_at: now,
+    };
+
+    state.db.insert_enterprise_token(&new_tok);
+
+    let updated_acc = state.db.load_enterprise_account(&cid);
+    let tokens = state.db.load_enterprise_tokens(&cid);
+    let total_tokens_created = state.db.count_company_non_revoked_tokens(&cid);
+
+    Ok(Json(json!({
+        "status": "NEW_TOKEN_CREATED",
+        "new_token": new_tok,
+        "enterprise_account": updated_acc,
+        "total_tokens_in_pool": total_tokens_created,
+        "tokens": tokens
+    })))
+}
+
+pub async fn portal_update_sites_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateCompanySitePolicyRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let cid = resolve_portal_company(&state, &headers)?;
+
+    let clean_allowed: Vec<String> = req
+        .allowed_sites
+        .into_iter()
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| s.len() >= 3 && s.contains('.'))
+        .collect();
+
+    let clean_blacklisted: Vec<String> = req
+        .blacklisted_sites
+        .into_iter()
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| s.len() >= 3 && s.contains('.'))
+        .collect();
+
+    let saved = state
+        .db
+        .save_company_site_policy(&cid, &clean_allowed, &clean_blacklisted);
+
+    {
+        let mut global_policy = state.policy.write().await;
+        global_policy.trusted_download_hosts = clean_allowed.clone();
+        for b in &clean_blacklisted {
+            if !global_policy.protected_domains.contains(b) {
+                global_policy.protected_domains.push(b.clone());
+            }
+        }
+        global_policy.version += 1;
+    }
+
+    Ok(Json(json!({
+        "status": "SITE_POLICY_UPDATED",
+        "site_policy": saved
+    })))
 }
 
 pub async fn get_enterprise_overview_handler(
