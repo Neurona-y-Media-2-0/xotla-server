@@ -55,7 +55,7 @@ use crate::{
 async fn root_info_handler(State(state): State<AppState>) -> Json<Value> {
     Json(json!({
         "status": "OK",
-        "service": "xotla-server (AegisQRO Core)",
+        "service": "aegisqro-server (AegisQRO Core)",
         "security_shield": "ACTIVE_ENFORCING",
         "registered_devices": state.devices_by_hw.len(),
         "endpoints": {
@@ -186,6 +186,6 @@ async fn main() {
         .await
         .expect("Failed to bind TCP listener");
 
-    println!("[INFO] xotla-server listening on http://{}", bind_addr);
+    println!("[INFO] aegisqro-server listening on http://{}", bind_addr);
     axum::serve(listener, app).await.expect("Server crashed");
 }

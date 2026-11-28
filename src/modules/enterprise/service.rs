@@ -11,6 +11,30 @@ use crate::{
 
 pub const DEFAULT_COMPANY_ID: &str = "comp_aegis_qro_01";
 
+pub fn company_token_prefix(company_name: &str) -> String {
+    let clean: String = company_name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == ' ')
+        .collect::<String>()
+        .to_lowercase();
+    let first = clean.split_whitespace().next().unwrap_or("empresa");
+    let slug = if first.len() > 14 {
+        &first[..14]
+    } else if first.is_empty() {
+        "empresa"
+    } else {
+        first
+    };
+    format!("{}_tok", slug)
+}
+
+pub fn generate_company_token_id(company_name: &str, seed: &str) -> (String, String) {
+    let tok_sha = sha256_hex(seed);
+    let prefix = company_token_prefix(company_name);
+    let tok_id = format!("{}_{}", prefix, &tok_sha[..16]);
+    (tok_id, tok_sha)
+}
+
 pub fn get_enterprise_account(state: &AppState, company_id: &str) -> EnterpriseAccount {
     state.db.load_enterprise_account(company_id)
 }
@@ -54,8 +78,7 @@ pub fn create_enterprise_account_with_pool(
 
     for idx in 0..needed {
         let seed = format!("{}:slot_{}:{}", cid, current_count + idx + 1, Uuid::new_v4());
-        let tok_sha = sha256_hex(&seed);
-        let tok_id = format!("aegis_tok_{}", &tok_sha[..16]);
+        let (tok_id, tok_sha) = generate_company_token_id(&req.company_name, &seed);
         let tok = EnterpriseClientToken {
             token_id: tok_id,
             company_id: cid.clone(),
@@ -164,8 +187,7 @@ pub fn issue_or_activate_client_token(
         req.device_id.as_deref().unwrap_or("unassigned"),
         Uuid::new_v4()
     );
-    let token_sha256 = sha256_hex(&raw_seed);
-    let token_id = format!("aegis_lic_{}", &token_sha256[..20]);
+    let (token_id, token_sha256) = generate_company_token_id(&account.company_name, &raw_seed);
     let now = Utc::now().to_rfc3339();
 
     let used_count = u32::from(req.device_id.is_some());
@@ -217,10 +239,15 @@ pub fn auto_bind_device_to_company_token(
     }
 
     let now = Utc::now().to_rfc3339();
+    let (token_id, token_sha256) = if session_token.contains("_tok_") {
+        (session_token.to_string(), sha256_hex(session_token))
+    } else {
+        generate_company_token_id(&account.company_name, session_token)
+    };
     let token = EnterpriseClientToken {
-        token_id: session_token.to_string(),
+        token_id,
         company_id: cid.to_string(),
-        token_sha256: sha256_hex(session_token),
+        token_sha256,
         assigned_device_id: Some(device_id.to_string()),
         secondary_device_id: None,
         assigned_employee_id: Some(employee_id.to_string()),

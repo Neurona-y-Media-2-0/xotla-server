@@ -51,7 +51,7 @@ fn attach_security_headers(headers: &mut HeaderMap) {
         HeaderValue::from_static("no-referrer"),
     );
     headers.insert(
-        "x-xotla-shield",
+        "x-aegis-shield",
         HeaderValue::from_static("ANTIVIRUS_WAF_E2E_CRYPTO_ACTIVE"),
     );
 }

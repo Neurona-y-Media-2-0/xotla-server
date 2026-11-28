@@ -17,8 +17,9 @@ use crate::{
             UpdateCompanySitePolicyRequest,
         },
         service::{
-            create_enterprise_account_with_pool, generate_temp_password, get_enterprise_account,
-            issue_or_activate_client_token, update_company_quota, DEFAULT_COMPANY_ID,
+            create_enterprise_account_with_pool, generate_company_token_id, generate_temp_password,
+            get_enterprise_account, issue_or_activate_client_token, update_company_quota,
+            DEFAULT_COMPANY_ID,
         },
     },
     state::AppState,
@@ -170,8 +171,10 @@ pub async fn portal_create_token_handler(
         .unwrap_or_else(|| format!("Licencia #{}", current_count + 1));
 
     let seed = format!("{}:regen:{}", cid, Uuid::new_v4());
-    let tok_sha = sha256_hex(&seed);
-    let tok_id = format!("aegis_tok_{}", &tok_sha[..16]);
+    let (tok_id, tok_sha) = generate_company_token_id(
+        &account.company_name,
+        &seed,
+    );
     let now = Utc::now().to_rfc3339();
 
     let new_tok = EnterpriseClientToken {

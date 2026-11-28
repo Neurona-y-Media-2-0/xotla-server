@@ -34,7 +34,7 @@ pub fn build_device_id(hardware_id: &str) -> String {
 pub fn build_session_token(hardware_id: &str) -> String {
     let seed = format!("{}:{}", hardware_id, Uuid::new_v4());
     let digest = sha256_hex(&seed);
-    format!("xotla_sha256_{}", &digest[..32])
+    format!("corporativo_tok_{}", &digest[..16])
 }
 
 pub fn find_existing_device(state: &AppState, identifier: &str) -> Option<RegisteredDevice> {

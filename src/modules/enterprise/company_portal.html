@@ -638,9 +638,10 @@
           ? `<span class="pill pill-red" style="background:#FEF3C7;color:#B45309;">${used} / ${maxD} lleno</span>`
           : `<span class="id-chip">${used} / ${maxD} disp.</span>`;
 
+        const lastUnderscore = t.token_id.lastIndexOf('_');
         const shown = revealedTokens[t.token_id]
           ? t.token_id
-          : t.token_id.slice(0, 12) + "••••••••";
+          : (lastUnderscore > 0 ? t.token_id.slice(0, lastUnderscore + 1) : t.token_id.slice(0, 12)) + "••••••••";
 
         const userBadge = t.assigned_employee_id
           ? `<strong>${t.assigned_employee_id}</strong>`
