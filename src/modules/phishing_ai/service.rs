@@ -86,7 +86,7 @@ async fn try_dedicated_llm_node(req: &PhishingAnalyzeRequest) -> Option<Dedicate
     let llm_url = std::env::var("AEGIS_LLM_NODE_URL")
         .unwrap_or_else(|_| "http://172.31.21.83:8000/analyze".to_string());
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(12))
+        .timeout(Duration::from_secs(30))
         .build()
         .ok()?;
 
