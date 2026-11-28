@@ -146,6 +146,7 @@ async fn main() {
         .route("/v1/policy", get(get_public_policy_handler))
         .route("/policy", get(get_public_policy_handler))
         .route("/admin/login", post(admin_login_handler))
+        .route("/v1/admin/login", post(admin_login_handler))
         .route("/admin/logout", post(admin_logout_handler))
         .route(
             "/admin/policy",
