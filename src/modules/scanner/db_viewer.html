@@ -39,14 +39,25 @@
       background: #192030;
       color: #fff;
     }
-    .container { max-width: 1200px; margin: 28px auto; padding: 0 20px 60px; }
+    .container { max-width: 1380px; margin: 28px auto; padding: 0 20px 60px; }
     .card {
       background: #121722;
       border: 1px solid #21293a;
       border-radius: 12px;
       padding: 20px;
       margin-bottom: 20px;
+      overflow: hidden;
     }
+    .table-scroll { width: 100%; overflow-x: auto; }
+    .table-scroll table { width: 100%; table-layout: fixed; }
+    td, th { overflow-wrap: anywhere; word-break: break-word; }
+    .col-hora { width: 10%; }
+    .col-disp { width: 13%; }
+    .col-tipo { width: 17%; }
+    .col-ver { width: 14%; }
+    .col-det { width: 30%; }
+    .col-sha { width: 9%; }
+    .col-tmp { width: 7%; }
     h2 { margin: 0 0 12px; font-size: 16px; color: #fff; }
     .profile-header {
       display: flex;
@@ -117,7 +128,12 @@
     <!-- 2. Archivos, Imagenes y URLs Recibidos -->
     <section class="card">
       <h2>Archivos, Imagenes y Mensajes que Llegan (con Hora y Como se Detecto)</h2>
+      <div class="table-scroll">
       <table>
+        <colgroup>
+          <col class="col-hora"><col class="col-disp"><col class="col-tipo"><col class="col-ver">
+          <col class="col-det"><col class="col-sha"><col class="col-tmp">
+        </colgroup>
         <thead>
           <tr>
             <th>Hora</th>
@@ -131,6 +147,7 @@
         </thead>
         <tbody id="incomingBody"></tbody>
       </table>
+      </div>
     </section>
   </main>
 
@@ -210,7 +227,7 @@
         if (/Magic Bytes/i.test(r)) { matched = true; add("Imagen falsa: por dentro es un ejecutable"); }
         if (/powershell/i.test(r)) { matched = true; add("Contiene comandos PowerShell ocultos"); }
 
-        const ck = r.match(/caracteres Cookie \((.*?)\)/i);
+        const ck = r.match(/(?:caracteres Cookie \(|Dominio\/Evento Cookie en ')(.*?)(?:'|\))/i);
         if (ck) {
           matched = true;
           let host = ck[1];
@@ -219,7 +236,7 @@
         }
 
         if (!matched) {
-          const t = r.replace(/\s+/g, " ").trim();
+          const t = r.replace(/^\[[A-Za-z]+\s*\/\s*[a-z_]+\]\s*/, "").replace(/\s+/g, " ").trim();
           if (t && !/^Dominios\/IPs en DEX/i.test(t) && !/^Inspeccion estatica/i.test(t)) {
             add(t.length > 150 ? t.slice(0, 150) + "..." : t);
           }
