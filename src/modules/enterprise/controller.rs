@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::{header, HeaderMap, StatusCode},
-    response::Html,
+    response::{Html, IntoResponse},
     Json,
 };
 use chrono::Utc;
@@ -29,8 +29,15 @@ pub async fn enterprise_admin_page_handler() -> Html<&'static str> {
     Html(include_str!("admin_tokens.html"))
 }
 
-pub async fn company_portal_page_handler() -> Html<&'static str> {
-    Html(include_str!("company_portal.html"))
+pub async fn company_portal_page_handler() -> impl IntoResponse {
+    (
+        [
+            (header::CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0"),
+            (header::PRAGMA, "no-cache"),
+            (header::EXPIRES, "0"),
+        ],
+        Html(include_str!("company_portal.html")),
+    )
 }
 
 fn resolve_portal_company(
