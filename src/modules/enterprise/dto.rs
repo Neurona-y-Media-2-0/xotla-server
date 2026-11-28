@@ -10,6 +10,8 @@ pub struct EnterpriseAccount {
     pub active_tokens_used: u32,
     pub available_tokens: u32,
     pub account_status: String,
+    pub has_temp_password: bool,
+    pub temp_password_expires_at: Option<String>,
     pub created_at: String,
 }
 
@@ -33,6 +35,15 @@ pub struct AllocateCompanyRequest {
     pub company_name: String,
     pub master_account_email: String,
     pub total_allocated_tokens: u32,
+    pub temp_password: Option<String>,
+    pub expires_in_hours: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GenerateTempPasswordRequest {
+    pub company_id: Option<String>,
+    pub custom_password: Option<String>,
+    pub expires_in_hours: Option<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -1,9 +1,10 @@
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use uuid::Uuid;
 use crate::{
     db::sha256_hex,
     modules::enterprise::dto::{
-        AllocateCompanyRequest, EnterpriseAccount, EnterpriseClientToken, IssueClientTokenRequest,
+        AllocateCompanyRequest, EnterpriseAccount, EnterpriseClientToken,
+        GenerateTempPasswordRequest, IssueClientTokenRequest,
     },
     state::AppState,
 };
@@ -27,7 +28,46 @@ pub fn update_company_quota(
         &req.master_account_email,
         req.total_allocated_tokens,
     );
+
+    if let Some(ref raw_pw) = req.temp_password {
+        if !raw_pw.trim().is_empty() {
+            let hours = req.expires_in_hours.unwrap_or(24).clamp(1, 720) as i64;
+            let expires_at = (Utc::now() + Duration::hours(hours)).to_rfc3339();
+            let pw_hash = sha256_hex(raw_pw.trim());
+            state.db.set_enterprise_temp_password(&cid, &pw_hash, &expires_at);
+        }
+    }
+
     state.db.load_enterprise_account(&cid)
+}
+
+pub fn generate_temp_password(
+    state: &AppState,
+    req: GenerateTempPasswordRequest,
+) -> (String, String, String, EnterpriseAccount) {
+    let cid = req
+        .company_id
+        .unwrap_or_else(|| DEFAULT_COMPANY_ID.to_string());
+
+    let plain_pw = req
+        .custom_password
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| {
+            let short = &Uuid::new_v4().simple().to_string()[..8].to_uppercase();
+            format!("AEGIS-{}-{}", &short[..4], &short[4..8])
+        });
+
+    let hours = req.expires_in_hours.unwrap_or(24).clamp(1, 720) as i64;
+    let expires_at = (Utc::now() + Duration::hours(hours)).to_rfc3339();
+    let pw_sha256 = sha256_hex(&plain_pw);
+
+    state
+        .db
+        .set_enterprise_temp_password(&cid, &pw_sha256, &expires_at);
+    let updated = state.db.load_enterprise_account(&cid);
+
+    (plain_pw, pw_sha256, expires_at, updated)
 }
 
 pub fn issue_or_activate_client_token(

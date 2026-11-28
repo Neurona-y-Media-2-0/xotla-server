@@ -7,10 +7,13 @@ use axum::{
 use serde_json::{json, Value};
 use crate::{
     modules::enterprise::{
-        dto::{AllocateCompanyRequest, IssueClientTokenRequest, RevokeTokenRequest},
+        dto::{
+            AllocateCompanyRequest, GenerateTempPasswordRequest, IssueClientTokenRequest,
+            RevokeTokenRequest,
+        },
         service::{
-            get_enterprise_account, issue_or_activate_client_token, update_company_quota,
-            DEFAULT_COMPANY_ID,
+            generate_temp_password, get_enterprise_account, issue_or_activate_client_token,
+            update_company_quota, DEFAULT_COMPANY_ID,
         },
     },
     state::AppState,
@@ -63,6 +66,21 @@ pub async fn issue_enterprise_token_handler(
             })),
         )),
     }
+}
+
+pub async fn generate_temp_password_handler(
+    State(state): State<AppState>,
+    Json(req): Json<GenerateTempPasswordRequest>,
+) -> Json<Value> {
+    let (plain_password, password_sha256, expires_at, account) =
+        generate_temp_password(&state, req);
+    Json(json!({
+        "status": "TEMP_PASSWORD_CREATED",
+        "temp_password": plain_password,
+        "password_sha256": password_sha256,
+        "expires_at": expires_at,
+        "enterprise_account": account
+    }))
 }
 
 pub async fn revoke_enterprise_token_handler(

@@ -106,6 +106,15 @@ impl Database {
         .expect("Failed to initialize SQLite schema");
 
         let _ = conn.execute(
+            "ALTER TABLE enterprise_accounts ADD COLUMN temp_password_sha256 TEXT",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE enterprise_accounts ADD COLUMN temp_password_expires_at TEXT",
+            [],
+        );
+
+        let _ = conn.execute(
             "INSERT OR IGNORE INTO enterprise_accounts (
                 company_id, company_name, master_account_email, plan_tier,
                 total_allocated_tokens, account_status, created_at
@@ -134,12 +143,15 @@ impl Database {
 
         conn.query_row(
             "SELECT company_id, company_name, master_account_email, plan_tier,
-                    total_allocated_tokens, account_status, created_at
+                    total_allocated_tokens, account_status, created_at,
+                    temp_password_sha256, temp_password_expires_at
              FROM enterprise_accounts WHERE company_id = ?1",
             params![company_id],
             |row| {
                 let total: u32 = row.get(4)?;
                 let avail = total.saturating_sub(active_used);
+                let pw_hash: Option<String> = row.get(7).ok().flatten();
+                let pw_exp: Option<String> = row.get(8).ok().flatten();
                 Ok(EnterpriseAccount {
                     company_id: row.get(0)?,
                     company_name: row.get(1)?,
@@ -149,6 +161,8 @@ impl Database {
                     active_tokens_used: active_used,
                     available_tokens: avail,
                     account_status: row.get(5)?,
+                    has_temp_password: pw_hash.as_deref().map(|s| !s.is_empty()).unwrap_or(false),
+                    temp_password_expires_at: pw_exp,
                     created_at: row.get(6)?,
                 })
             },
@@ -162,8 +176,25 @@ impl Database {
             active_tokens_used: active_used,
             available_tokens: 10u32.saturating_sub(active_used),
             account_status: "ACTIVE".to_string(),
+            has_temp_password: false,
+            temp_password_expires_at: None,
             created_at: Utc::now().to_rfc3339(),
         })
+    }
+
+    pub fn set_enterprise_temp_password(
+        &self,
+        company_id: &str,
+        password_sha256: &str,
+        expires_at: &str,
+    ) {
+        let conn = self.connect();
+        let _ = conn.execute(
+            "UPDATE enterprise_accounts
+             SET temp_password_sha256 = ?1, temp_password_expires_at = ?2
+             WHERE company_id = ?3",
+            params![password_sha256, expires_at, company_id],
+        );
     }
 
     pub fn upsert_enterprise_account(
