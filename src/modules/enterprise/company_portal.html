@@ -931,6 +931,7 @@
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
           <button class="btn-primary" id="btnIncidentPdf" style="padding:8px 14px; font-size:12.5px;" onclick="downloadIncidentsPdf()">Descargar PDF</button>
+          <button class="btn-outline" id="btnPrintPdf" style="padding:8px 14px; font-size:12.5px;" onclick="printIncidentsReport()">Imprimir Reporte</button>
           <button class="act-btn" title="Cerrar" onclick="closeIncidentModal()" style="font-size:16px; line-height:1;">&times;</button>
         </div>
       </div>
@@ -1815,13 +1816,68 @@
       document.getElementById("btnIncidentPdf").disabled = false;
     }
 
-    /* ---------- PDF (generador mínimo, sin dependencias) ---------- */
+    /* ---------- PDF y Reporte Imprimible ---------- */
     function pdfSafe(s) {
       return String(s ?? "")
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/[^\x20-\x7E]/g, " ")
         .replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")
-        .slice(0, 200);
+        .slice(0, 110);
+    }
+
+    function getCleanIncidentSummary(e) {
+      let p = e.raw_payload;
+      if (typeof p === "string") {
+        try { p = JSON.parse(p); } catch (_) { p = {}; }
+      }
+      p = p || {};
+      const d = p.details || {};
+
+      const action = d.action_taken || p.action_taken || p.action || "REGISTRADO";
+      let actionLabel = "REGISTRADO";
+      if (/BLOCK|PREVENT|DENY/i.test(action)) actionLabel = "BLOQUEADO";
+      else if (/FLAG|WARN|ALERT/i.test(action)) actionLabel = "MARCADO";
+      else actionLabel = String(action).toUpperCase();
+
+      const host = d.host || d.domain || (d.original_url ? new URL(d.original_url).hostname : "No especificado");
+
+      let finding = "";
+      if (d.indicator) {
+        if (d.indicator.includes("no_secure") && d.indicator.includes("no_httponly")) {
+          finding = "Cookie de sesion transmitida sin cifrado Secure ni proteccion HttpOnly";
+        } else if (d.indicator.includes("no_secure")) {
+          finding = "Cookie de sesion transmitida en texto plano (falta bandera Secure)";
+        } else if (d.indicator.includes("no_httponly")) {
+          finding = "Cookie de sesion vulnerable a extraccion por script (falta HttpOnly)";
+        } else {
+          finding = "Indicador de seguridad: " + d.indicator;
+        }
+      } else if (d.file) {
+        finding = "Archivo: " + (d.file.name || "") + (d.file.double_extension ? " [Doble Extension Oculta]" : "");
+      } else if (p.artifact_name) {
+        finding = "Aplicacion: " + p.artifact_name;
+        if (Array.isArray(p.requested_permissions) && p.requested_permissions.length) {
+          const perms = p.requested_permissions.slice(0, 2).map(r => {
+            if (r.includes("MANAGE_DEVICE_POLICY_CAMERA") || r.includes("sensor=camera") || r.includes(".CAMERA")) return "Intento de activar Camara";
+            if (r.includes("READ_SMS") || r.includes("RECEIVE_SMS")) return "Acceso no autorizado a SMS";
+            if (r.includes("ACCESS_FINE_LOCATION")) return "Rastreo de Ubicacion GPS";
+            if (r.includes("SYSTEM_ALERT_WINDOW")) return "Ventana de Phishing Superpuesta";
+            if (r.includes("RECORD_AUDIO")) return "Activacion de Microfono";
+            return r.replace(/^Background app holds sensitive permission:\s*/i, "");
+          }).join(" · ");
+          finding += " | " + perms;
+        }
+      } else if (p.rule || d.rule) {
+        finding = "Regla de seguridad: " + (p.rule || d.rule);
+      } else {
+        finding = "Evento de riesgo detectado bajo politica Zero-Trust";
+      }
+
+      return {
+        action: actionLabel,
+        target: host,
+        finding: finding
+      };
     }
 
     function chunkArray(arr, size) {
@@ -1841,7 +1897,7 @@
         const contentNum = num++;
         pageNums.push(pageNum);
 
-        let stream = "BT /F1 9 Tf 40 805 Td 12 TL\n";
+        let stream = "BT /F1 9 Tf 36 805 Td 13 TL\n";
         lines.forEach(ln => { stream += `(${ln}) Tj T*\n`; });
         stream += "ET";
 
@@ -1881,58 +1937,218 @@
       const artifacts = data.artifacts || [];
 
       const lines = [];
-      lines.push(pdfSafe("RESUMEN DE INCIDENTES - TOKEN"));
-      lines.push(pdfSafe("Token: " + (t.token_id || "")));
-      lines.push(pdfSafe("Cuenta (company_id): " + (data.company_id || "")));
-      lines.push(pdfSafe("Usuario / empleado: " + (t.assigned_employee_id || "sin asignar")));
-      lines.push(pdfSafe("Dispositivos: " + ((data.devices || []).join(", ") || "ninguno")));
-      lines.push(pdfSafe("Estado token: " + (t.status || "")));
-      lines.push(pdfSafe("Plataforma: " + (t.platform || "") + "  Etiqueta: " + (t.client_label || "")));
-      lines.push(pdfSafe("Generado: " + new Date().toISOString()));
+      const hr = "--------------------------------------------------------------------------------";
+      const dhr = "================================================================================";
+
+      lines.push(dhr);
+      lines.push(pdfSafe("          AEGISQRO ZERO-TRUST -- REPORTE DE INCIDENTES DE SEGURIDAD"));
+      lines.push(dhr);
       lines.push("");
-      lines.push(pdfSafe("RESUMEN"));
-      lines.push(pdfSafe("Total incidentes: " + (s.total_incidents ?? 0) + "  (eventos " + (s.total_events ?? 0) + " + artefactos " + (s.total_artifacts ?? 0) + ")"));
-      lines.push(pdfSafe("Artefactos maliciosos: " + (s.malicious_artifacts ?? 0)));
-      lines.push(pdfSafe("Puntaje max. amenaza: " + Number(s.max_threat_score ?? 0).toFixed(2)));
-      lines.push(pdfSafe("Puntaje max. riesgo actual: " + Number(s.max_current_risk_score ?? 0).toFixed(2)));
-      const riskStr = Object.entries(s.by_risk_level || {}).map(([k, v]) => k + "=" + v).join(", ") || "ninguno";
-      lines.push(pdfSafe("Incidentes por nivel de riesgo: " + riskStr));
-      const typeStr = Object.entries(s.by_event_type || {}).map(([k, v]) => k + "=" + v).join(", ") || "ninguno";
-      lines.push(pdfSafe("Tipos de evento: " + typeStr));
-      lines.push(pdfSafe("Primer registro: " + (s.first_seen || "-")));
-      lines.push(pdfSafe("Ultimo registro: " + (s.last_seen || "-")));
+      lines.push(pdfSafe("DATOS DEL TOKEN Y DE LA CUENTA"));
+      lines.push(hr);
+      lines.push(pdfSafe(`Token ID:            ${t.token_id || "-"}`));
+      lines.push(pdfSafe(`Empresa / Cuenta:    ${data.company_id || "-"}`));
+      lines.push(pdfSafe(`Usuario Asignado:    ${t.assigned_employee_id || "Sin asignar"}`));
+      lines.push(pdfSafe(`Dispositivos:        ${(data.devices || []).join(", ") || "Ninguno registrado"}`));
+      lines.push(pdfSafe(`Estado de Token:     ${t.status || "ACTIVE"}`));
+      lines.push(pdfSafe(`Plataforma / Agente: ${t.platform || "Multiplataforma"}`));
+      lines.push(pdfSafe(`Fecha de Emision:    ${new Date().toLocaleString("es-MX")} (Hora Local)`));
+      lines.push(hr);
       lines.push("");
 
-      lines.push(pdfSafe("INCIDENTES - EVENTOS DE TELEMETRIA (" + events.length + ")"));
-      if (!events.length) lines.push("Sin eventos registrados.");
-      events.forEach((e, i) => {
-        lines.push(pdfSafe(`#${i + 1} [${e.received_at || ""}] [${e.risk_level || "?"}] type=${e.event_type || ""} source=${e.source || ""}`));
-        lines.push(pdfSafe(`    device=${e.device_id || ""} employee=${e.employee_id || ""} threat=${Number(e.threat_score ?? 0).toFixed(2)} risk=${Number(e.current_risk_score ?? 0).toFixed(2)} event_id=${e.event_id || ""}`));
-        lines.push(pdfSafe("    payload=" + JSON.stringify(e.raw_payload ?? {})));
-      });
+      lines.push(pdfSafe("RESUMEN EJECUTIVO DE AMENAZAS"));
+      lines.push(hr);
+      lines.push(pdfSafe(`Total Incidentes:     ${s.total_incidents ?? (events.length + artifacts.length)}`));
+      lines.push(pdfSafe(`Eventos Telemetria:   ${s.total_events ?? events.length}`));
+      lines.push(pdfSafe(`Artefactos Sandbox:   ${s.total_artifacts ?? artifacts.length}`));
+      lines.push(pdfSafe(`Amenazas Maliciosas:  ${s.malicious_artifacts ?? 0}`));
+      lines.push(pdfSafe(`Nivel Maximo Amenaza: ${Number(s.max_threat_score ?? 0).toFixed(2)} / 1.00`));
+
+      const typeSummary = Object.entries(s.by_event_type || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `  * ${humanizeEventType(k)}: ${v}`)
+        .slice(0, 6);
+      if (typeSummary.length) {
+        lines.push(pdfSafe("Desglose de Amenazas:"));
+        typeSummary.forEach(ts => lines.push(pdfSafe(ts)));
+      }
+      lines.push(hr);
       lines.push("");
 
-      lines.push(pdfSafe("INCIDENTES - ARTEFACTOS ESCANEADOS (" + artifacts.length + ")"));
-      if (!artifacts.length) lines.push("Sin artefactos registrados.");
-      artifacts.forEach((a, i) => {
-        lines.push(pdfSafe(`#${i + 1} [${a.scanned_at || ""}] verdict=${a.verdict || ""} type=${a.file_type || ""} magic=${a.detected_magic || ""}`));
-        lines.push(pdfSafe(`    sha256=${a.artifact_sha256 || ""} device=${a.device_id || ""} employee=${a.employee_id || ""}`));
-        lines.push(pdfSafe(`    threat=${Number(a.threat_score ?? 0).toFixed(2)} method=${a.detection_method || ""} purged=${a.ephemeral_purged}`));
-        lines.push(pdfSafe("    reasons=" + ((a.detection_reasons || []).join("; ") || "-")));
-      });
+      if (events.length) {
+        lines.push(pdfSafe(`REGISTRO AUDITABLE DE INCIDENTES DE TELEMETRIA (${events.length})`));
+        lines.push(hr);
 
-      const pages = chunkArray(lines, 58);
+        events.forEach((e, idx) => {
+          const num = String(idx + 1).padStart(3, "0");
+          const tPart = formatDateReadable(e.received_at);
+          const cleanInfo = getCleanIncidentSummary(e);
+          const score = Number(e.threat_score ?? 0).toFixed(2);
+          const typeName = humanizeEventType(e.event_type);
+          const srcName = humanizeSource(e.source);
+          const userStr = e.employee_id || t.assigned_employee_id || "General";
+          const devStr = e.device_id || "Dispositivo";
+
+          lines.push(pdfSafe(`[INCIDENTE #${num}]  ${tPart.date} ${tPart.time}  |  RIESGO: ${e.risk_level || "INFO"} (${score})`));
+          lines.push(pdfSafe(`  Amenaza:    ${typeName}`));
+          lines.push(pdfSafe(`  Origen:     ${srcName} | Equipo: ${devStr} | Usuario: ${userStr}`));
+          lines.push(pdfSafe(`  Accion:     ${cleanInfo.action} | Objetivo: ${cleanInfo.target}`));
+          lines.push(pdfSafe(`  Hallazgo:   ${cleanInfo.finding}`));
+          lines.push(hr);
+        });
+        lines.push("");
+      }
+
+      if (artifacts.length) {
+        lines.push(pdfSafe(`REGISTRO DE ARTEFACTOS Y ARCHIVOS ESCANEADOS (${artifacts.length})`));
+        lines.push(hr);
+
+        artifacts.forEach((a, idx) => {
+          const num = String(idx + 1).padStart(3, "0");
+          const tPart = formatDateReadable(a.scanned_at);
+          const reasons = humanizeReasons(a.detection_reasons).join(" | ") || a.detection_method || "Analisis heuristico";
+          const sha = a.artifact_sha256 ? a.artifact_sha256.slice(0, 24) + "..." : "No disponible";
+
+          lines.push(pdfSafe(`[ARTEFACTO #${num}]  ${tPart.date} ${tPart.time}  |  VEREDICTO: ${a.verdict || "CLEAN"}`));
+          lines.push(pdfSafe(`  Tipo:       ${a.file_type || "Binario"} | Hash SHA-256: ${sha}`));
+          lines.push(pdfSafe(`  Equipo:     ${a.device_id || ""} | Usuario: ${a.employee_id || ""}`));
+          lines.push(pdfSafe(`  Motivos:    ${reasons}`));
+          lines.push(hr);
+        });
+        lines.push("");
+      }
+
+      lines.push(pdfSafe("AEGISQRO Plataforma de Ciberseguridad Zero-Trust -- Cifrado Verificado"));
+      lines.push(dhr);
+
+      const pages = chunkArray(lines, 48);
       const pdfBytes = buildPdf(pages);
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const safeTok = String(t.token_id || "token").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 40);
       a.href = url;
-      a.download = `incidentes-${safeTok}.pdf`;
+      a.download = `reporte-incidentes-${safeTok}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
+    function printIncidentsReport() {
+      const data = currentIncidentData;
+      if (!data) return;
+      const t = data.token || {};
+      const s = data.summary || {};
+      const events = data.events || [];
+      const artifacts = data.artifacts || [];
+
+      const printWin = window.open("", "_blank");
+      if (!printWin) {
+        alert("Por favor permite ventanas emergentes para abrir el reporte imprimible.");
+        return;
+      }
+
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Reporte de Incidentes - ${escapeHtml(t.token_id || "")}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 30px; color: #0F172A; font-size: 12px; line-height: 1.4; }
+            h1 { font-size: 17px; margin: 0 0 4px 0; color: #0F2942; font-weight: 700; letter-spacing: -0.01em; }
+            .sub { color: #64748B; font-size: 12px; margin-bottom: 18px; }
+            .card { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; }
+            .kpis { display: flex; gap: 10px; margin-bottom: 20px; }
+            .kpi { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px; background: #FFFFFF; }
+            .kpi-lbl { font-size: 10px; text-transform: uppercase; color: #64748B; font-weight: 600; letter-spacing: 0.03em; }
+            .kpi-val { font-size: 20px; font-weight: 700; color: #0F172A; margin-top: 2px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11.5px; page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            th { background: #F1F5F9; color: #475569; padding: 8px 10px; text-align: left; font-size: 10.5px; text-transform: uppercase; border-bottom: 1px solid #CBD5E1; letter-spacing: 0.03em; }
+            td { padding: 9px 10px; border-bottom: 1px solid #F1F5F9; vertical-align: top; }
+            .pill { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10.5px; font-weight: 700; }
+            .pill-crit { background: #FEE2E2; color: #DC2626; }
+            .pill-warn { background: #FEF3C7; color: #B45309; }
+            .pill-ok { background: #DCFCE7; color: #15803D; }
+            .id-chip { font-family: monospace; background: #F1F5F9; padding: 2px 6px; border-radius: 4px; border: 1px solid #E2E8F0; font-size: 11px; }
+            @media print {
+              body { margin: 12mm; }
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #0F2942; padding-bottom: 10px; margin-bottom: 16px;">
+            <div>
+              <h1>AEGISQRO &mdash; REPORTE AUDITABLE DE SEGURIDAD ZERO-TRUST</h1>
+              <div class="sub">Auditoria de Incidentes y Telemetria en Tiempo Real</div>
+            </div>
+            <div style="text-align:right;">
+              <span class="id-chip">${escapeHtml(t.token_id || "")}</span>
+              <div style="font-size:11px; color:#64748B; margin-top:4px;">${new Date().toLocaleString("es-MX")}</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div><strong>Empresa / Cuenta:</strong> ${escapeHtml(data.company_id || "")} &nbsp;|&nbsp; <strong>Usuario Asignado:</strong> <strong>${escapeHtml(t.assigned_employee_id || "Sin asignar")}</strong> &nbsp;|&nbsp; <strong>Estado:</strong> ${escapeHtml(t.status || "ACTIVE")}</div>
+            <div style="margin-top:4px;"><strong>Dispositivos Vinculados:</strong> ${escapeHtml((data.devices || []).join(", ") || "Ninguno registrado")} &nbsp;|&nbsp; <strong>Plataforma:</strong> ${escapeHtml(t.platform || "Multiplataforma")}</div>
+          </div>
+
+          <div class="kpis">
+            <div class="kpi"><div class="kpi-lbl">Total Incidentes</div><div class="kpi-val">${s.total_incidents ?? events.length}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Eventos Telemetria</div><div class="kpi-val">${s.total_events ?? events.length}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Artefactos Sandbox</div><div class="kpi-val">${s.total_artifacts ?? artifacts.length}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Maliciosos</div><div class="kpi-val" style="color:#DC2626;">${s.malicious_artifacts ?? 0}</div></div>
+            <div class="kpi"><div class="kpi-lbl">Max. Amenaza</div><div class="kpi-val">${Number(s.max_threat_score ?? 0).toFixed(2)}</div></div>
+          </div>
+
+          <h3 style="font-size:13px; margin:20px 0 8px; color:#0F172A; font-weight:700;">Eventos de Telemetria Registrados (${events.length})</h3>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:115px;">Fecha y Hora</th>
+                <th style="width:85px;">Riesgo</th>
+                <th style="width:180px;">Amenaza y Origen</th>
+                <th style="width:150px;">Dispositivo / Usuario</th>
+                <th>Detalle y Accion de Seguridad</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${events.map(e => {
+                const tPart = formatDateReadable(e.received_at);
+                const isCrit = /CRIT|HIGH/i.test(e.risk_level);
+                const pClass = isCrit ? 'pill-crit' : 'pill-warn';
+                const clean = getCleanIncidentSummary(e);
+                return `
+                  <tr>
+                    <td><strong>${tPart.time}</strong><br><span style="color:#64748B;">${tPart.date}</span></td>
+                    <td><span class="pill ${pClass}">${escapeHtml(e.risk_level || "INFO")}</span></td>
+                    <td><strong>${escapeHtml(humanizeEventType(e.event_type))}</strong><br><span style="color:#64748B;">${escapeHtml(humanizeSource(e.source))}</span></td>
+                    <td><span class="id-chip">${escapeHtml(e.device_id || "")}</span><br><span style="color:#64748B;">${escapeHtml(e.employee_id || "")}</span></td>
+                    <td>
+                      <div><strong>Accion:</strong> ${escapeHtml(clean.action)} &nbsp;|&nbsp; <strong>Objetivo:</strong> <span style="font-family:monospace;color:#2563EB;">${escapeHtml(clean.target)}</span></div>
+                      <div style="color:#475569; margin-top:2px;">${escapeHtml(clean.finding)}</div>
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+
+          <div style="margin-top:30px; text-align:center; font-size:10px; color:#94A3B8; border-top:1px solid #E2E8F0; padding-top:12px;">
+            Documento emitido por la Plataforma de Ciberseguridad AEGISQRO Zero-Trust. Cifrado SHA-256 verificado.
+          </div>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+      setTimeout(() => {
+        printWin.focus();
+        printWin.print();
+      }, 400);
     }
 
     if (portalToken) {
