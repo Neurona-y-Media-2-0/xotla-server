@@ -3,680 +3,187 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AegisQRO — Centro de Operaciones Zero-Trust & UEBA SOC</title>
+  <title>AegisQRO — Datos Recibidos y Perfil de Conducta</title>
   <style>
-    :root {
-      --bg: #080b10;
-      --panel: #10151f;
-      --panel-hover: #161d2a;
-      --border: #1f293d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --accent: #388bfd;
-      --danger: #f85149;
-      --warn: #d29922;
-      --success: #2ea043;
-      --purple: #a371f7;
-    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      background: #0b0e14;
+      color: #e6edf3;
       line-height: 1.5;
     }
-    .topbar {
-      background: #0c1017;
-      border-bottom: 1px solid var(--border);
+    .navbar {
+      background: #121722;
+      border-bottom: 1px solid #21293a;
       padding: 14px 28px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
     }
-    .brand-wrap { display: flex; align-items: center; gap: 14px; }
-    .brand-shield {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #da291c, #79150e);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      font-size: 16px;
-      color: #fff;
-      box-shadow: 0 0 16px rgba(218, 41, 28, 0.45);
-    }
-    .brand-title { font-size: 18px; font-weight: 800; letter-spacing: 0.02em; color: #fff; }
-    .brand-sub { font-size: 12px; color: var(--muted); }
-    .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .pill {
-      padding: 6px 13px;
-      border-radius: 999px;
-      font-size: 12px;
+    .brand { font-size: 16px; font-weight: 800; color: #fff; }
+    .nav-links { display: flex; gap: 10px; }
+    .nav-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
       font-weight: 600;
-      border: 1px solid var(--border);
-      background: var(--panel);
-      color: var(--text);
       text-decoration: none;
+      color: #8b949e;
     }
-    .pill-live {
-      background: rgba(46, 160, 67, 0.15);
-      border-color: var(--success);
-      color: #3fb950;
-    }
-    .container { max-width: 1440px; margin: 22px auto; padding: 0 22px 60px; }
-
-    /* KPI Row */
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-      margin-bottom: 22px;
-    }
-    .kpi-card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 18px 20px;
-      position: relative;
-      overflow: hidden;
-    }
-    .kpi-label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-    .kpi-val { font-size: 30px; font-weight: 800; margin-top: 6px; color: #fff; }
-    .kpi-foot { font-size: 12px; color: var(--muted); margin-top: 4px; }
-
-    /* Two-column layout */
-    .split-grid {
-      display: grid;
-      grid-template-columns: 1.35fr 1fr;
-      gap: 18px;
-      margin-bottom: 22px;
-    }
-    @media (max-width: 1080px) {
-      .split-grid { grid-template-columns: 1fr; }
-    }
-    .panel-card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px 22px;
-    }
-    .panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .panel-title { font-size: 15.5px; font-weight: 700; color: #fff; margin: 0; }
-    .panel-tag { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-
-    /* UEBA Gauge & Features */
-    .risk-banner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
-      padding: 16px 18px;
-      border-radius: 12px;
-      background: #0b0f17;
-      border: 1px solid var(--border);
-      margin-bottom: 16px;
-    }
-    .risk-score-big { font-size: 38px; font-weight: 900; line-height: 1; }
-    .progress-bar-bg {
-      width: 100%;
-      height: 10px;
-      background: #1b2230;
-      border-radius: 999px;
-      overflow: hidden;
-      margin: 12px 0;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #2ea043, #d29922, #f85149);
-      transition: width 0.4s ease;
-    }
-    .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
-      gap: 10px;
-      margin: 14px 0;
-    }
-    .feature-box {
-      background: #0b0f17;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 12px;
-    }
-    .feature-box .f-name { font-size: 11px; color: var(--muted); }
-    .feature-box .f-val { font-size: 15px; font-weight: 700; color: #79c0ff; margin-top: 2px; font-family: monospace; }
-
-    /* Forms & Buttons */
-    .form-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 12px;
-    }
-    input, textarea, select {
-      background: #0b0f17;
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 9px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-family: inherit;
-    }
-    input:focus, textarea:focus { outline: 1px solid var(--accent); }
-    .btn {
-      background: var(--accent);
+    .nav-btn.active {
+      background: #1f6feb;
       color: #fff;
-      border: none;
-      padding: 9px 15px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
     }
-    .btn:hover { opacity: 0.9; }
-    .btn-danger {
-      background: rgba(248, 81, 73, 0.18);
-      color: #ff7b72;
-      border: 1px solid rgba(248, 81, 73, 0.5);
-      padding: 5px 10px;
-      font-size: 11.5px;
-      border-radius: 6px;
-      cursor: pointer;
+    .nav-btn:hover:not(.active) {
+      background: #192030;
+      color: #fff;
     }
-    .btn-purple { background: #8957e5; }
-
-    /* Tables */
-    .table-wrap {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow-x: auto;
-      margin-bottom: 22px;
+    .container { max-width: 1200px; margin: 28px auto; padding: 0 20px 60px; }
+    .card {
+      background: #121722;
+      border: 1px solid #21293a;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    h2 { margin: 0 0 12px; font-size: 16px; color: #fff; }
+    .profile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .score-big { font-size: 28px; font-weight: 800; }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: left; }
     th {
-      background: #151c28;
-      color: var(--muted);
-      font-weight: 600;
+      color: #8b949e;
       font-size: 11.5px;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+      border-bottom: 1px solid #21293a;
     }
-    td { padding: 12px 16px; border-bottom: 1px solid #171f2e; vertical-align: top; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: var(--panel-hover); }
-
+    td { padding: 12px; border-bottom: 1px solid #192030; vertical-align: top; }
+    .mono {
+      font-family: monospace;
+      font-size: 12px;
+      color: #79c0ff;
+      background: #0b0e14;
+      padding: 3px 7px;
+      border-radius: 6px;
+      border: 1px solid #21293a;
+    }
     .badge {
       display: inline-block;
       padding: 3px 10px;
       border-radius: 999px;
       font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.03em;
     }
-    .badge-malicious { background: rgba(248, 81, 73, 0.16); color: #ff7b72; border: 1px solid rgba(248, 81, 73, 0.45); }
-    .badge-suspicious { background: rgba(210, 153, 34, 0.16); color: #e3b341; border: 1px solid rgba(210, 153, 34, 0.45); }
-    .badge-clean { background: rgba(46, 160, 67, 0.16); color: #3fb950; border: 1px solid rgba(46, 160, 67, 0.45); }
-    .badge-purple { background: rgba(163, 113, 247, 0.16); color: #d2a8ff; border: 1px solid rgba(163, 113, 247, 0.45); }
-
-    .mono {
-      font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
-      font-size: 11.5px;
-      color: #79c0ff;
-      background: #0b0f17;
-      padding: 3px 7px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-    }
-    .reason-list { margin: 0; padding-left: 16px; color: #c9d1d9; font-size: 12.5px; }
-    .reason-list li { margin-bottom: 3px; }
-    .muted { color: var(--muted); font-size: 12px; }
+    .b-bad { background: #f8514922; color: #ff7b72; border: 1px solid #f8514966; }
+    .b-warn { background: #d2992222; color: #e3b341; border: 1px solid #d2992266; }
+    .b-ok { background: #2ea04322; color: #3fb950; border: 1px solid #2ea04366; }
+    ul { margin: 0; padding-left: 16px; }
+    li { margin-bottom: 3px; }
+    .muted { color: #8b949e; font-size: 12px; }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand-wrap">
-      <div class="brand-shield">A</div>
-      <div>
-        <div class="brand-title">AEGISQRO — ZERO-TRUST SOC &amp; UEBA COMMAND CENTER</div>
-        <div class="brand-sub">Core Rust Backend (54.146.211.248) + Nodo Dedicado EC2 LLM (RoBERTa + Horizon-Labs ONNX + Qwen2.5)</div>
-      </div>
+  <nav class="navbar">
+    <div class="brand">AEGISQRO · MONITOR DE DATOS</div>
+    <div class="nav-links">
+      <a href="/dashboard" class="nav-btn">1. Cuenta, Grupos y Tokens</a>
+      <a href="/db" class="nav-btn active">2. Ver Datos que Llegan</a>
     </div>
-    <div class="top-actions">
-      <a href="/demo-phishing" target="_blank" class="pill">Abrir Laboratorio Phishing</a>
-      <a href="/v1/policy" target="_blank" class="pill">Ver Politica JSON</a>
-      <span id="wsStatusPill" class="pill pill-live">SOC En Vivo · Conectado</span>
-    </div>
-  </header>
+  </nav>
 
   <main class="container">
-    <!-- 1. KPIs Superiores -->
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Riesgo Conductual UEBA (emp_042)</div>
-        <div id="kpiRiskScore" class="kpi-val" style="color:#ff7b72;">0.93</div>
-        <div id="kpiRiskAction" class="kpi-foot">ISOLATE_HOST_AND_REVOKE_SESSION</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Tokens Activos de la Empresa</div>
-        <div id="kpiTokens" class="kpi-val" style="color:#3fb950;">2 / 10</div>
-        <div id="kpiCompany" class="kpi-foot">Corporativo Industrial Queretaro</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Archivos / URLs Analizados (SHA-256)</div>
-        <div id="kpiArtifacts" class="kpi-val" style="color:#58a6ff;">0</div>
-        <div class="kpi-foot">100% temporales borrados tras revision</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Dispositivos Enrolados</div>
-        <div id="kpiDevices" class="kpi-val">0</div>
-        <div class="kpi-foot">Android + Windows Sandbox + Extension Wasm</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Nodo IA Dedicado (HackBloque-LLM)</div>
-        <div class="kpi-val" style="color:#d2a8ff; font-size:22px;">ONLINE (t3.large)</div>
-        <div class="kpi-foot">RoBERTa + Horizon ONNX + Qwen2.5 LLM</div>
-      </div>
-    </div>
-
-    <!-- 2. Perfil de Conducta UEBA + Consola LLM en Vivo -->
-    <div class="split-grid">
-      <!-- Panel Izquierdo: Perfil de Conducta UEBA -->
-      <section class="panel-card">
-        <div class="panel-header">
-          <h2 class="panel-title">Perfil de Conducta del Empleado (UEBA + Isolation Forest)</h2>
-          <span class="badge badge-purple">Formula S(x) = 2^(-E(h(x))/c(n))</span>
+    <!-- 1. Resumen Rapido de Conducta -->
+    <section class="card">
+      <div class="profile-header">
+        <div>
+          <h2>Perfil de Conducta Actual</h2>
+          <div id="conductSummary" style="font-size:14px; color:#c9d1d9;">Cargando...</div>
         </div>
-
-        <div class="risk-banner">
-          <div>
-            <div class="muted">Empleado Monitoreado</div>
-            <div style="font-size:18px; font-weight:800;" id="uebaEmpTitle">emp_042 · Departamento de Contabilidad</div>
-            <div class="muted" id="uebaVectorText">Vector: Ataque Multi-Vector</div>
-          </div>
-          <div style="text-align:right;">
-            <div id="uebaScoreBig" class="risk-score-big" style="color:#ff7b72;">0.93</div>
-            <span id="uebaLevelBadge" class="badge badge-malicious">CRITICAL</span>
-          </div>
+        <div style="text-align:right;">
+          <div id="conductScore" class="score-big" style="color:#ff7b72;">0.00</div>
+          <span id="conductLevel" class="badge b-bad">CRITICAL</span>
         </div>
-
-        <div class="progress-bar-bg">
-          <div id="uebaProgressFill" class="progress-bar-fill" style="width: 93%;"></div>
-        </div>
-
-        <div id="uebaNarrativeBox" style="background:#0b0f17; border:1px solid var(--border); border-radius:10px; padding:12px 14px; font-size:13px; color:#c9d1d9; margin-bottom:12px;"></div>
-
-        <div class="panel-tag" style="margin-bottom:6px;">Vector de 7 Variables en Tiempo Real (Features del Modelo):</div>
-        <div id="uebaFeatureBoxes" class="feature-grid"></div>
-
-        <div class="panel-tag" style="margin:12px 0 6px;">Anomalias Conductuales Correlacionadas:</div>
-        <ul id="uebaAnomalies" class="reason-list"></ul>
-      </section>
-
-      <!-- Panel Derecho: Cuenta Empresarial + Probador LLM en Vivo -->
-      <div style="display:flex; flex-direction:column; gap:18px;">
-        <!-- Cuenta Empresarial y Asignacion de Tokens -->
-        <section class="panel-card">
-          <div class="panel-header">
-            <h2 class="panel-title">Cuenta Maestra de Empresa &amp; Cupo de Tokens</h2>
-            <span id="entStatusBadge" class="badge badge-clean">ACTIVE</span>
-          </div>
-          <div id="entAccountInfo" style="font-size:13px; margin-bottom:12px;"></div>
-
-          <div class="panel-tag">Actualizar Cupo de Tokens de la Empresa:</div>
-          <div class="form-row">
-            <input type="text" id="inpCompanyName" placeholder="Nombre de la Empresa" style="flex:2;" />
-            <input type="number" id="inpTotalTokens" placeholder="Cupo Tokens" style="width:110px;" min="1" max="500" />
-            <button class="btn" onclick="updateCompanyQuota()">Guardar Cupo</button>
-          </div>
-
-          <div class="panel-tag" style="margin-top:14px;">Activar Nuevo Token para Cliente / Dispositivo:</div>
-          <div class="form-row">
-            <input type="text" id="inpClientLabel" placeholder="Ej. Celular Ventas 03" style="flex:2;" />
-            <input type="text" id="inpEmployeeId" placeholder="emp_042" value="emp_042" style="width:100px;" />
-            <select id="inpPlatform">
-              <option value="android">android</option>
-              <option value="windows">windows</option>
-              <option value="browser">browser</option>
-            </select>
-            <button class="btn" onclick="issueNewToken()">Emitir Token</button>
-          </div>
-          <div id="entFeedback" class="muted" style="margin-top:8px;"></div>
-        </section>
-
-        <!-- Analizador LLM en Vivo (Segunda Instancia EC2) -->
-        <section class="panel-card">
-          <div class="panel-header">
-            <h2 class="panel-title">Analizador IA en Vivo (RoBERTa + Horizon ONNX + Qwen2.5 LLM)</h2>
-            <span class="badge badge-purple">EC2 172.31.21.83:8000</span>
-          </div>
-          <div class="form-row" style="margin-top:0;">
-            <input type="text" id="llmSubject" placeholder="Asunto (ej. URGENTE: Buzon SAT)" style="flex:1;" value="URGENTE: Cuenta suspendida SAT" />
-            <input type="text" id="llmSender" placeholder="Remitente (ej. alerta@xn--sat.com)" style="flex:1;" value="alerta@xn--sat-gob-mx-99a.com" />
-          </div>
-          <div class="form-row">
-            <textarea id="llmText" rows="2" style="width:100%;" placeholder="Pega aqui el correo, SMS o URL sospechosa para que el LLM lo analice...">Su cuenta fiscal y bancaria fue bloqueada. Ingrese su contrasena y descargue factura_noviembre.exe de inmediato.</textarea>
-          </div>
-          <div class="form-row" style="justify-content:space-between; align-items:center;">
-            <button class="btn btn-purple" id="btnRunLlm" onclick="runLlmAnalysis()">Analizar con LLM + HuggingFace</button>
-            <span id="llmStatusText" class="muted">Se guardara automaticamente en la tabla SQLite</span>
-          </div>
-          <div id="llmResultBox" style="display:none; margin-top:12px; background:#0b0f17; border:1px solid var(--border); border-radius:10px; padding:12px; font-size:12.5px;"></div>
-        </section>
       </div>
-    </div>
+    </section>
 
-    <!-- 3. Tabla de Tokens Activos de Clientes de la Empresa -->
-    <div class="panel-header" style="margin-bottom:8px;">
-      <h2 class="panel-title">1. Tokens de Licencia Activos de la Empresa (Tabla: enterprise_client_tokens)</h2>
-    </div>
-    <div class="table-wrap">
+    <!-- 2. Archivos, Imagenes y URLs Recibidos -->
+    <section class="card">
+      <h2>Archivos, Imagenes y Mensajes que Llegan (con Hora y Como se Detecto)</h2>
       <table>
         <thead>
           <tr>
-            <th>Token ID (Licencia App)</th>
-            <th>Hash SHA-256</th>
-            <th>Cliente / Equipo</th>
-            <th>Device ID Vinculado</th>
-            <th>Empleado</th>
-            <th>Plataforma</th>
-            <th>Estado</th>
-            <th>Ultimo Uso</th>
-            <th>Accion</th>
-          </tr>
-        </thead>
-        <tbody id="tokensTableBody"></tbody>
-      </table>
-    </div>
-
-    <!-- 4. Tabla de Archivos, Imagenes y URLs Analizados -->
-    <div class="panel-header" style="margin-bottom:8px;">
-      <h2 class="panel-title">2. Archivos, Imagenes Temporales y Correos Analizados — Que es y Como se Detecto (Tabla: scanned_artifacts)</h2>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Hora Local (QRO)</th>
-            <th>Tipo de Archivo</th>
-            <th>Formato / Motor</th>
+            <th>Hora</th>
+            <th>Dispositivo</th>
+            <th>Tipo</th>
             <th>Veredicto</th>
-            <th>Score</th>
-            <th>Metodo de Deteccion</th>
-            <th>Como se detecto que era malo (Explicacion / LLM / Reglas)</th>
-            <th>Hash SHA-256</th>
+            <th>Como se detecto (Explicacion / LLM)</th>
+            <th>SHA-256</th>
             <th>Temporal</th>
           </tr>
         </thead>
-        <tbody id="artifactsTableBody"></tbody>
+        <tbody id="incomingBody"></tbody>
       </table>
-    </div>
-
-    <!-- 5. Tabla de Dispositivos y Eventos -->
-    <div class="panel-header" style="margin-bottom:8px;">
-      <h2 class="panel-title">3. Dispositivos Enrolados Sin Duplicados (Tabla: devices)</h2>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Device ID</th>
-            <th>Agente / Plataforma</th>
-            <th>Modelo / Hostname</th>
-            <th>Hardware UID (SHA-256)</th>
-            <th>Empleado</th>
-            <th>Ultima Conexion</th>
-          </tr>
-        </thead>
-        <tbody id="devicesTableBody"></tbody>
-      </table>
-    </div>
+    </section>
   </main>
 
   <script>
-    function badgeClass(val) {
+    function bClass(val) {
       const v = String(val || "").toUpperCase();
-      if (v.includes("MALICIOUS") || v.includes("CRITICAL") || v.includes("BLOCKED") || v.includes("HIGH_RISK") || v.includes("PHISHING") || v.includes("REVOKED")) {
-        return "badge badge-malicious";
+      if (v.includes("MALICIOUS") || v.includes("CRITICAL") || v.includes("HIGH_RISK") || v.includes("PHISHING") || v.includes("BLOCKED")) {
+        return "badge b-bad";
       }
-      if (v.includes("SUSPICIOUS") || v.includes("HIGH") || v.includes("MEDIUM") || v.includes("FLAGGED") || v.includes("SPAM")) {
-        return "badge badge-suspicious";
+      if (v.includes("MEDIUM") || v.includes("HIGH") || v.includes("FLAGGED") || v.includes("SUSPICIOUS")) {
+        return "badge b-warn";
       }
-      return "badge badge-clean";
+      return "badge b-ok";
     }
 
-    function fmtDate(iso) {
+    function fmtTime(iso) {
       if (!iso) return "-";
       const d = new Date(iso);
-      return d.toLocaleTimeString("es-MX", { hour12: false }) + " · " + d.toLocaleDateString("es-MX");
+      return d.toLocaleTimeString("es-MX", { hour12: false }) + " (" + d.toLocaleDateString("es-MX") + ")";
     }
 
-    function shortSha(s) {
-      if (!s) return "-";
-      return s.length > 14 ? s.slice(0, 14) + "..." : s;
+    async function loadIncoming() {
+      const [artsRes, profRes] = await Promise.all([
+        fetch("/v1/scanner/artifacts"),
+        fetch("/v1/ueba/profile/emp_042")
+      ]);
+      const artifacts = await artsRes.json();
+      const prof = await profRes.json();
+
+      document.getElementById("conductSummary").textContent = prof.llm_behavioral_summary || "";
+      document.getElementById("conductScore").textContent = Number(prof.current_risk_score || 0).toFixed(2);
+      document.getElementById("conductLevel").className = bClass(prof.risk_level);
+      document.getElementById("conductLevel").textContent = prof.risk_level;
+
+      document.getElementById("incomingBody").innerHTML = artifacts.map(a => `
+        <tr>
+          <td class="muted">${fmtTime(a.scanned_at)}</td>
+          <td><span class="mono">${a.device_id}</span></td>
+          <td><strong>${a.file_type}</strong><br><span class="muted">${a.detection_method}</span></td>
+          <td><span class="${bClass(a.verdict)}">${a.verdict} (${Number(a.threat_score).toFixed(2)})</span></td>
+          <td>
+            <ul>
+              ${(a.detection_reasons || []).map(r => `<li>${r}</li>`).join("")}
+            </ul>
+          </td>
+          <td><span class="mono" title="${a.artifact_sha256}">${(a.artifact_sha256 || "").slice(0, 12)}...</span></td>
+          <td><span class="badge b-ok">${a.ephemeral_purged ? "Borrado" : "Activo"}</span></td>
+        </tr>
+      `).join("") || '<tr><td colspan="7" class="muted">Aun no llegan archivos</td></tr>';
     }
 
-    async function updateCompanyQuota() {
-      const name = document.getElementById("inpCompanyName").value.trim() || "Corporativo Industrial Queretaro S.A. de C.V.";
-      const total = Number(document.getElementById("inpTotalTokens").value || 10);
-      const res = await fetch("/v1/enterprise/quota", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_name: name,
-          master_account_email: "seguridad@corporativo-qro.mx",
-          total_allocated_tokens: total
-        })
-      });
-      if (res.ok) {
-        document.getElementById("entFeedback").textContent = "[OK] Cupo empresarial actualizado.";
-        refreshDashboard();
-      }
-    }
-
-    async function issueNewToken() {
-      const label = document.getElementById("inpClientLabel").value.trim() || "Dispositivo Corporativo";
-      const emp = document.getElementById("inpEmployeeId").value.trim() || "emp_042";
-      const plat = document.getElementById("inpPlatform").value;
-      const res = await fetch("/v1/enterprise/tokens/issue", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employee_id: emp,
-          client_label: label,
-          platform: plat
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        document.getElementById("entFeedback").textContent = "[OK] Token activado: " + data.token.token_id;
-        document.getElementById("inpClientLabel").value = "";
-        refreshDashboard();
-      } else {
-        document.getElementById("entFeedback").textContent = "[ERROR] " + (data.error || "Limite alcanzado");
-      }
-    }
-
-    async function revokeToken(tokenId) {
-      await fetch("/v1/enterprise/tokens/revoke", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token_id: tokenId })
-      });
-      refreshDashboard();
-    }
-
-    async function runLlmAnalysis() {
-      const btn = document.getElementById("btnRunLlm");
-      const status = document.getElementById("llmStatusText");
-      const box = document.getElementById("llmResultBox");
-      btn.disabled = true;
-      status.textContent = "Consultando HackBloque-LLM (RoBERTa + Horizon ONNX + Qwen2.5)...";
-
-      try {
-        const res = await fetch("/v1/phishing/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            subject: document.getElementById("llmSubject").value,
-            sender: document.getElementById("llmSender").value,
-            text: document.getElementById("llmText").value
-          })
-        });
-        const data = await res.json();
-        box.style.display = "block";
-        box.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <strong>Veredicto: <span class="${badgeClass(data.verdict)}">${data.verdict}</span></strong>
-            <span class="mono">Score: ${Number(data.combined_threat_score).toFixed(2)}</span>
-          </div>
-          <div class="muted" style="margin-bottom:6px;">
-            RoBERTa: <strong>${data.roberta_email_detector.label} (${(data.roberta_email_detector.confidence * 100).toFixed(1)}%)</strong> ·
-            Horizon-Labs ONNX: <strong>${data.horizon_scam_detector.label} (${(data.horizon_scam_detector.confidence * 100).toFixed(1)}%)</strong>
-          </div>
-          <ul class="reason-list">
-            ${(data.triggered_indicators || []).map(i => `<li>${i}</li>`).join("")}
-          </ul>
-        `;
-        status.textContent = "[OK] Analizado por Nodo LLM y guardado en SQLite";
-        refreshDashboard();
-      } catch (e) {
-        status.textContent = "Error al consultar LLM";
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    async function refreshDashboard() {
-      try {
-        const [devsRes, artsRes, profRes, entRes] = await Promise.all([
-          fetch("/v1/devices"),
-          fetch("/v1/scanner/artifacts"),
-          fetch("/v1/ueba/profile/emp_042"),
-          fetch("/v1/enterprise")
-        ]);
-
-        const devices = await devsRes.json();
-        const artifacts = await artsRes.json();
-        const profile = await profRes.json();
-        const enterprise = await entRes.json();
-
-        const acc = enterprise.enterprise_account || {};
-        const tokens = enterprise.client_tokens || [];
-        const f = profile.features || {};
-        const b = profile.behavioral_breakdown || {};
-
-        // KPIs
-        const score = Number(profile.current_risk_score || 0);
-        document.getElementById("kpiRiskScore").textContent = score.toFixed(2) + " (" + profile.risk_level + ")";
-        document.getElementById("kpiRiskAction").textContent = profile.recommended_action;
-        document.getElementById("kpiTokens").textContent = `${acc.active_tokens_used ?? 0} / ${acc.total_allocated_tokens ?? 10}`;
-        document.getElementById("kpiCompany").textContent = `${acc.company_name || ""} (${acc.available_tokens ?? 0} libres)`;
-        document.getElementById("kpiArtifacts").textContent = artifacts.length;
-        document.getElementById("kpiDevices").textContent = devices.length;
-
-        // UEBA Panel
-        document.getElementById("uebaEmpTitle").textContent = `${profile.employee_id} · Departamento de ${profile.department}`;
-        document.getElementById("uebaVectorText").textContent = `Vector Dominante: ${b.primary_attack_vector || "-"}`;
-        document.getElementById("uebaScoreBig").textContent = score.toFixed(2);
-        document.getElementById("uebaLevelBadge").className = badgeClass(profile.risk_level);
-        document.getElementById("uebaLevelBadge").textContent = profile.risk_level;
-        document.getElementById("uebaProgressFill").style.width = Math.min(100, Math.round(score * 100)) + "%";
-        document.getElementById("uebaNarrativeBox").innerHTML = `<strong>Dictamen Conductual:</strong> ${profile.llm_behavioral_summary || ""}`;
-
-        document.getElementById("uebaFeatureBoxes").innerHTML = `
-          <div class="feature-box"><div class="f-name">1. department_id</div><div class="f-val">${f.department_id ?? 1} (Contabilidad)</div></div>
-          <div class="feature-box"><div class="f-name">2. hour_of_day</div><div class="f-val">${f.hour_of_day ?? 0}:00 hrs</div></div>
-          <div class="feature-box"><div class="f-name">3. powershell_spawned</div><div class="f-val">${f.powershell_spawned ? "1 (DETECTADO)" : "0 (NO)"}</div></div>
-          <div class="feature-box"><div class="f-name">4. homograph_attempts</div><div class="f-val">${f.homograph_attempts ?? 0} intentos</div></div>
-          <div class="feature-box"><div class="f-name">5. sandbox_threat_score</div><div class="f-val">${Number(f.sandbox_threat_score || 0).toFixed(2)}</div></div>
-          <div class="feature-box"><div class="f-name">6. apk_high_risk_perms</div><div class="f-val">${f.apk_high_risk_perms ?? 0} permisos</div></div>
-          <div class="feature-box"><div class="f-name">7. external_ip_connections</div><div class="f-val">${f.external_ip_connections ?? 0} dominios C2</div></div>
-          <div class="feature-box"><div class="f-name">Desviacion Linea Base</div><div class="f-val">+${b.behavior_deviation_percent ?? 0}%</div></div>
-        `;
-
-        document.getElementById("uebaAnomalies").innerHTML =
-          (profile.anomalies_detected || []).map(x => `<li>${x}</li>`).join("") || "<li>Sin anomalias</li>";
-
-        // Enterprise Box
-        if (!document.getElementById("inpCompanyName").value) {
-          document.getElementById("inpCompanyName").value = acc.company_name || "";
-          document.getElementById("inpTotalTokens").value = acc.total_allocated_tokens || 10;
-        }
-        document.getElementById("entAccountInfo").innerHTML = `
-          <div><strong>${acc.company_name || ""}</strong> <span class="mono">${acc.company_id || ""}</span></div>
-          <div class="muted">Cuenta Unica: ${acc.master_account_email || ""} · Activos: <strong>${acc.active_tokens_used ?? 0}</strong> · Disponibles: <strong>${acc.available_tokens ?? 0}</strong> de <strong>${acc.total_allocated_tokens ?? 0}</strong></div>
-        `;
-
-        // Tokens Table
-        document.getElementById("tokensTableBody").innerHTML = tokens.map(t => `
-          <tr>
-            <td><span class="mono">${t.token_id}</span></td>
-            <td><span class="mono" title="${t.token_sha256}">${shortSha(t.token_sha256)}</span></td>
-            <td><strong>${t.client_label}</strong></td>
-            <td><span class="mono">${t.assigned_device_id || "Sin vincular"}</span></td>
-            <td>${t.assigned_employee_id || "-"}</td>
-            <td>${t.platform}</td>
-            <td><span class="${badgeClass(t.status)}">${t.status}</span></td>
-            <td class="muted">${fmtDate(t.last_used_at)}</td>
-            <td>
-              ${t.status === "ACTIVE" ? `<button class="btn-danger" onclick="revokeToken('${t.token_id}')">Revocar</button>` : `<span class="muted">Revocado</span>`}
-            </td>
-          </tr>
-        `).join("") || '<tr><td colspan="9" class="muted">Sin tokens registrados</td></tr>';
-
-        // Artifacts Table
-        document.getElementById("artifactsTableBody").innerHTML = artifacts.map(a => `
-          <tr>
-            <td class="muted">${fmtDate(a.scanned_at)}</td>
-            <td><strong>${a.file_type}</strong></td>
-            <td><span class="mono">${a.detected_magic}</span></td>
-            <td><span class="${badgeClass(a.verdict)}">${a.verdict}</span></td>
-            <td><strong>${Number(a.threat_score).toFixed(2)}</strong></td>
-            <td><span class="mono">${a.detection_method}</span></td>
-            <td>
-              <ul class="reason-list">
-                ${(a.detection_reasons || []).map(r => `<li>${r}</li>`).join("")}
-              </ul>
-            </td>
-            <td><span class="mono" title="${a.artifact_sha256}">${shortSha(a.artifact_sha256)}</span></td>
-            <td><span class="badge badge-clean">${a.ephemeral_purged ? "BORRADO (OK)" : "ACTIVO"}</span></td>
-          </tr>
-        `).join("") || '<tr><td colspan="9" class="muted">Sin archivos analizados</td></tr>';
-
-        // Devices Table
-        document.getElementById("devicesTableBody").innerHTML = devices.map(d => `
-          <tr>
-            <td><span class="mono">${d.device_id}</span></td>
-            <td><strong>${d.agent_kind}</strong> <span class="muted">(${d.platform})</span></td>
-            <td>${d.hostname} <span class="muted">${d.os_version}</span></td>
-            <td><span class="mono" title="${d.hardware_id}">${shortSha(d.hardware_id)}</span></td>
-            <td>${d.employee_id} (${d.department})</td>
-            <td class="muted">${fmtDate(d.last_seen)}</td>
-          </tr>
-        `).join("") || '<tr><td colspan="6" class="muted">Sin dispositivos</td></tr>';
-      } catch (e) {}
-    }
-
-    refreshDashboard();
-    setInterval(refreshDashboard, 3000);
+    loadIncoming();
+    setInterval(loadIncoming, 3000);
   </script>
 </body>
 </html>

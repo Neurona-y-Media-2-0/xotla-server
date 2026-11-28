@@ -1,6 +1,7 @@
 use axum::{
     extract::State,
     http::StatusCode,
+    response::Html,
     Json,
 };
 use serde_json::{json, Value};
@@ -14,6 +15,10 @@ use crate::{
     },
     state::AppState,
 };
+
+pub async fn enterprise_admin_page_handler() -> Html<&'static str> {
+    Html(include_str!("admin_tokens.html"))
+}
 
 pub async fn get_enterprise_overview_handler(
     State(state): State<AppState>,

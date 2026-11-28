@@ -19,8 +19,9 @@ use crate::{
     modules::{
         devices::controller::{handshake_handler, list_devices_handler},
         enterprise::controller::{
-            get_enterprise_overview_handler, issue_enterprise_token_handler,
-            revoke_enterprise_token_handler, update_enterprise_quota_handler,
+            enterprise_admin_page_handler, get_enterprise_overview_handler,
+            issue_enterprise_token_handler, revoke_enterprise_token_handler,
+            update_enterprise_quota_handler,
         },
         phishing_ai::controller::analyze_phishing_handler,
         policy::controller::{
@@ -129,7 +130,8 @@ async fn main() {
             get(get_admin_policy_handler).put(put_admin_policy_handler),
         )
         .route("/demo-phishing", get(demo_phishing_page_handler))
-        .route("/dashboard", get(db_viewer_page_handler))
+        .route("/dashboard", get(enterprise_admin_page_handler))
+        .route("/tokens", get(enterprise_admin_page_handler))
         .route("/soc", get(db_viewer_page_handler))
         .route("/db", get(db_viewer_page_handler))
         .route("/v1/db", get(db_viewer_page_handler))

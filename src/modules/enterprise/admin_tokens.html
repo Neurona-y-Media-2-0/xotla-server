@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AegisQRO — Cuenta Empresarial, Grupos y Tokens</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: #0b0e14;
+      color: #e6edf3;
+      line-height: 1.5;
+    }
+    .navbar {
+      background: #121722;
+      border-bottom: 1px solid #21293a;
+      padding: 14px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand { font-size: 16px; font-weight: 800; color: #fff; }
+    .nav-links { display: flex; gap: 10px; }
+    .nav-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      color: #8b949e;
+      border: 1px solid transparent;
+    }
+    .nav-btn.active {
+      background: #1f6feb;
+      color: #fff;
+    }
+    .nav-btn:hover:not(.active) {
+      background: #192030;
+      color: #fff;
+    }
+    .container { max-width: 980px; margin: 28px auto; padding: 0 20px 60px; }
+    .card {
+      background: #121722;
+      border: 1px solid #21293a;
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+    h2 { margin: 0 0 14px; font-size: 16px; color: #fff; }
+    .quota-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .q-box {
+      background: #0b0e14;
+      border: 1px solid #21293a;
+      border-radius: 10px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .q-label { font-size: 12px; color: #8b949e; }
+    .q-val { font-size: 26px; font-weight: 800; margin-top: 4px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+    label { display: block; font-size: 12px; color: #8b949e; margin-bottom: 5px; }
+    input, select {
+      width: 100%;
+      background: #0b0e14;
+      border: 1px solid #263044;
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13.5px;
+    }
+    .btn {
+      background: #1f6feb;
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn:hover { background: #388bfd; }
+    .btn-revoke {
+      background: #f8514922;
+      color: #ff7b72;
+      border: 1px solid #f8514966;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: left; }
+    th {
+      color: #8b949e;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      padding: 10px 12px;
+      border-bottom: 1px solid #21293a;
+    }
+    td { padding: 12px; border-bottom: 1px solid #192030; }
+    .mono {
+      font-family: monospace;
+      font-size: 12px;
+      color: #79c0ff;
+      background: #0b0e14;
+      padding: 3px 7px;
+      border-radius: 6px;
+      border: 1px solid #21293a;
+    }
+    .badge-ok {
+      background: #2ea04322;
+      color: #3fb950;
+      border: 1px solid #2ea04366;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-off {
+      background: #f8514922;
+      color: #ff7b72;
+      border: 1px solid #f8514966;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .msg { font-size: 13px; margin-top: 10px; color: #3fb950; }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="brand">AEGISQRO · ADMINISTRACION</div>
+    <div class="nav-links">
+      <a href="/dashboard" class="nav-btn active">1. Cuenta, Grupos y Tokens</a>
+      <a href="/db" class="nav-btn">2. Ver Datos que Llegan</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <!-- 1. Cuenta Unica de la Empresa -->
+    <section class="card">
+      <h2>1. Cuenta Maestra de la Empresa</h2>
+      <div class="quota-row">
+        <div class="q-box">
+          <div class="q-label">Tokens Totales de la Empresa</div>
+          <div id="qTotal" class="q-val">10</div>
+        </div>
+        <div class="q-box">
+          <div class="q-label">Tokens Activos en Uso</div>
+          <div id="qUsed" class="q-val" style="color:#3fb950;">2</div>
+        </div>
+        <div class="q-box">
+          <div class="q-label">Tokens Disponibles</div>
+          <div id="qAvail" class="q-val" style="color:#58a6ff;">8</div>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div>
+          <label>Nombre de la Empresa</label>
+          <input type="text" id="compName" placeholder="Ej. Corporativo QRO" />
+        </div>
+        <div>
+          <label>Correo de la Cuenta Unica</label>
+          <input type="email" id="compEmail" placeholder="admin@empresa.mx" />
+        </div>
+        <div>
+          <label>Cantidad de Tokens Asignados</label>
+          <input type="number" id="compTokens" min="1" max="500" />
+        </div>
+        <div>
+          <button class="btn" onclick="saveCompany()">Guardar Cuenta</button>
+        </div>
+      </div>
+      <div id="msgCompany" class="msg"></div>
+    </section>
+
+    <!-- 2. Asignar Token a Grupo / Cliente -->
+    <section class="card">
+      <h2>2. Asignar Nuevo Token a Grupo / Dispositivo</h2>
+      <div class="form-grid">
+        <div>
+          <label>Grupo / Departamento</label>
+          <input type="text" id="tokGroup" placeholder="Ej. Contabilidad, TI, Ventas" value="Contabilidad" />
+        </div>
+        <div>
+          <label>Nombre del Cliente / Equipo</label>
+          <input type="text" id="tokLabel" placeholder="Ej. Celular Rafa / Laptop Berny" />
+        </div>
+        <div>
+          <label>Plataforma de la App</label>
+          <select id="tokPlatform">
+            <option value="android">Android App</option>
+            <option value="windows">Windows / Sandbox</option>
+            <option value="browser">Extension Web</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn" onclick="createToken()">Generar y Activar Token</button>
+        </div>
+      </div>
+      <div id="msgToken" class="msg"></div>
+    </section>
+
+    <!-- 3. Lista de Tokens Activos por Grupo -->
+    <section class="card">
+      <h2>3. Tokens Activos Asignados</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Grupo</th>
+            <th>Cliente / Dispositivo</th>
+            <th>Plataforma</th>
+            <th>Token para la App</th>
+            <th>Estado</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody id="tokensList"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    async function loadEnterprise() {
+      const res = await fetch("/v1/enterprise");
+      const data = await res.json();
+      const acc = data.enterprise_account || {};
+      const tokens = data.client_tokens || [];
+
+      document.getElementById("qTotal").textContent = acc.total_allocated_tokens ?? 10;
+      document.getElementById("qUsed").textContent = acc.active_tokens_used ?? 0;
+      document.getElementById("qAvail").textContent = acc.available_tokens ?? 0;
+
+      if (!document.getElementById("compName").dataset.loaded) {
+        document.getElementById("compName").value = acc.company_name || "";
+        document.getElementById("compEmail").value = acc.master_account_email || "";
+        document.getElementById("compTokens").value = acc.total_allocated_tokens ?? 10;
+        document.getElementById("compName").dataset.loaded = "1";
+      }
+
+      document.getElementById("tokensList").innerHTML = tokens.map(t => `
+        <tr>
+          <td><strong>${t.assigned_employee_id || "General"}</strong></td>
+          <td>${t.client_label} <span style="color:#8b949e;font-size:12px;">(${t.assigned_device_id || "nuevo"})</span></td>
+          <td>${t.platform}</td>
+          <td><span class="mono">${t.token_id}</span></td>
+          <td><span class="${t.status === 'ACTIVE' ? 'badge-ok' : 'badge-off'}">${t.status}</span></td>
+          <td>
+            ${t.status === "ACTIVE"
+              ? `<button class="btn-revoke" onclick="revokeTok('${t.token_id}')">Desactivar</button>`
+              : `<span style="color:#8b949e;font-size:12px;">Inactivo</span>`}
+          </td>
+        </tr>
+      `).join("") || '<tr><td colspan="6" style="color:#8b949e;">No hay tokens asignados</td></tr>';
+    }
+
+    async function saveCompany() {
+      const res = await fetch("/v1/enterprise/quota", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: document.getElementById("compName").value.trim(),
+          master_account_email: document.getElementById("compEmail").value.trim(),
+          total_allocated_tokens: Number(document.getElementById("compTokens").value || 10)
+        })
+      });
+      if (res.ok) {
+        document.getElementById("msgCompany").textContent = "[OK] Cuenta empresarial actualizada.";
+        loadEnterprise();
+      }
+    }
+
+    async function createToken() {
+      const group = document.getElementById("tokGroup").value.trim() || "General";
+      const label = document.getElementById("tokLabel").value.trim() || "Equipo Corporativo";
+      const platform = document.getElementById("tokPlatform").value;
+
+      const res = await fetch("/v1/enterprise/tokens/issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_id: group,
+          client_label: label,
+          platform: platform
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById("msgToken").style.color = "#3fb950";
+        document.getElementById("msgToken").textContent = "[OK] Token creado: " + data.token.token_id;
+        document.getElementById("tokLabel").value = "";
+        loadEnterprise();
+      } else {
+        document.getElementById("msgToken").style.color = "#ff7b72";
+        document.getElementById("msgToken").textContent = "[ERROR] " + (data.error || "Sin cupo de tokens");
+      }
+    }
+
+    async function revokeTok(id) {
+      await fetch("/v1/enterprise/tokens/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token_id: id })
+      });
+      loadEnterprise();
+    }
+
+    loadEnterprise();
+  </script>
+</body>
+</html>
