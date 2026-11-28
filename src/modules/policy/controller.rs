@@ -27,13 +27,29 @@ pub async fn admin_login_handler(
     let expected_user = state.config.admin_user.as_str();
     let expected_pass = state.config.admin_password.as_str();
 
-    if req.usuario != expected_user || req.password != expected_pass {
+    let is_super_admin = req.usuario == expected_user && req.password == expected_pass;
+    let ent_account = if is_super_admin {
+        Some(state.db.load_enterprise_account("comp_aegis_qro_01"))
+    } else {
+        state
+            .db
+            .verify_enterprise_credentials(&req.usuario, &req.password)
+    };
+
+    let Some(account) = ent_account else {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(json!({ "error": "Credenciales invalidas" })),
+            Json(json!({ "error": "Correo o contrasena incorrectos" })),
         )
             .into_response();
-    }
+    };
+
+    let claimed_token = state.db.activate_available_company_token(
+        &account.company_id,
+        "General",
+        &format!("Extension ({})", account.master_account_email),
+        "browser",
+    );
 
     let (session_id, csrf_token) = create_admin_session(&state, &req.usuario);
     let cookie = format!(
@@ -48,7 +64,9 @@ pub async fn admin_login_handler(
             "status": "AUTHENTICATED",
             "usuario": req.usuario,
             "csrf_token": csrf_token,
-            "session_token": session_id
+            "session_token": session_id,
+            "enterprise_account": account,
+            "assigned_token": claimed_token
         })),
     )
         .into_response()

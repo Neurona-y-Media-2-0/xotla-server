@@ -245,6 +245,67 @@ impl Database {
         );
     }
 
+    pub fn verify_enterprise_credentials(
+        &self,
+        email_or_name: &str,
+        plain_password: &str,
+    ) -> Option<EnterpriseAccount> {
+        let conn = self.connect();
+        let expected_sha = sha256_hex(plain_password.trim());
+        let company_id: String = conn
+            .query_row(
+                "SELECT company_id FROM enterprise_accounts
+                 WHERE (LOWER(master_account_email) = LOWER(?1)
+                        OR LOWER(company_name) = LOWER(?1)
+                        OR company_id = ?1)
+                   AND temp_password_sha256 = ?2
+                   AND account_status = 'ACTIVE'
+                 LIMIT 1",
+                params![email_or_name.trim(), expected_sha],
+                |r| r.get(0),
+            )
+            .ok()?;
+
+        Some(self.load_enterprise_account(&company_id))
+    }
+
+    pub fn activate_available_company_token(
+        &self,
+        company_id: &str,
+        employee_id: &str,
+        client_label: &str,
+        platform: &str,
+    ) -> Option<EnterpriseClientToken> {
+        let conn = self.connect();
+        let tok_id: Option<String> = conn
+            .query_row(
+                "SELECT token_id FROM enterprise_client_tokens
+                 WHERE company_id = ?1 AND status = 'AVAILABLE'
+                 ORDER BY activated_at ASC LIMIT 1",
+                params![company_id],
+                |r| r.get(0),
+            )
+            .ok();
+
+        if let Some(tid) = tok_id {
+            let now = Utc::now().to_rfc3339();
+            let _ = conn.execute(
+                "UPDATE enterprise_client_tokens
+                 SET status = 'ACTIVE',
+                     assigned_employee_id = ?1,
+                     client_label = ?2,
+                     platform = ?3,
+                     last_used_at = ?4
+                 WHERE token_id = ?5",
+                params![employee_id, client_label, platform, now, tid],
+            );
+        }
+
+        self.load_enterprise_tokens(company_id)
+            .into_iter()
+            .find(|t| t.status == "ACTIVE")
+    }
+
     pub fn upsert_enterprise_account(
         &self,
         company_id: &str,
