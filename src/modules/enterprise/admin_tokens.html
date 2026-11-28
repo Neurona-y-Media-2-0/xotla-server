@@ -686,7 +686,8 @@
       key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
       edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>',
       power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>',
-      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>'
+      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+      copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>'
     };
 
     let cachedAccounts = [];
@@ -742,11 +743,62 @@
         return `
           <tr>
             <td><span class="id-chip">${t.company_id}</span></td>
-            <td><span class="tok-mono">${t.token_id}</span></td>
+            <td>
+              <div style="display:inline-flex; align-items:center; gap:6px;">
+                <span class="tok-mono">${t.token_id}</span>
+                <button class="act-btn" title="Copiar token" onclick="copyAdminTok('${t.token_id}', this)">${SVG.copy}</button>
+              </div>
+            </td>
             <td style="text-align:right;">${pill}</td>
           </tr>
         `;
       }).join("") || '<tr><td colspan="3" style="color:#94A3B8;">Sin tokens generados</td></tr>';
+    }
+
+    function copyAdminTok(tokId, btnEl) {
+      const showSuccess = () => {
+        if (btnEl) {
+          const orig = btnEl.innerHTML;
+          btnEl.innerHTML = SVG.checkCircle;
+          btnEl.style.color = "#15803D";
+          setTimeout(() => {
+            btnEl.innerHTML = orig;
+            btnEl.style.color = "";
+          }, 1500);
+        }
+      };
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(tokId).then(showSuccess).catch(() => {
+          fallbackAdminCopy(tokId, showSuccess);
+        });
+        return;
+      }
+      fallbackAdminCopy(tokId, showSuccess);
+    }
+
+    function fallbackAdminCopy(text, onDone) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (ok) {
+          if (onDone) onDone();
+        } else {
+          window.prompt("Copia el token con Ctrl+C / Cmd+C:", text);
+        }
+      } catch (err) {
+        window.prompt("Copia el token con Ctrl+C / Cmd+C:", text);
+      }
     }
 
     function startEdit(companyId) {

@@ -1345,11 +1345,58 @@
       applyTokenFilter();
     }
 
-    function copyTok(tokId) {
-      navigator.clipboard?.writeText(tokId);
-      const msg = document.getElementById("tokenMsg");
-      msg.style.color = "#15803D";
-      msg.textContent = `Token copiado al portapapeles: ${tokId}`;
+    function copyTok(tokId, btnEl) {
+      const showFeedback = () => {
+        const msg = document.getElementById("tokenMsg");
+        if (msg) {
+          msg.style.color = "#15803D";
+          msg.textContent = `Token copiado al portapapeles: ${tokId}`;
+          setTimeout(() => {
+            if (msg.textContent.includes(tokId)) msg.textContent = "";
+          }, 4000);
+        }
+        if (btnEl) {
+          const orig = btnEl.innerHTML;
+          btnEl.innerHTML = SVG.checkCircle;
+          btnEl.style.color = "#15803D";
+          setTimeout(() => {
+            btnEl.innerHTML = orig;
+            btnEl.style.color = "";
+          }, 1500);
+        }
+      };
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(tokId)
+          .then(showFeedback)
+          .catch(() => fallbackCopy(tokId, showFeedback));
+      } else {
+        fallbackCopy(tokId, showFeedback);
+      }
+    }
+
+    function fallbackCopy(text, onDone) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (ok) {
+          if (onDone) onDone();
+        } else {
+          window.prompt("Copia el token con Ctrl+C / Cmd+C:", text);
+        }
+      } catch (err) {
+        window.prompt("Copia el token con Ctrl+C / Cmd+C:", text);
+      }
     }
 
     function renderTokens(tokens) {
@@ -1383,14 +1430,18 @@
         return `
           <tr>
             <td>${userBadge}</td>
-            <td><span class="id-chip">${shown}</span></td>
+            <td>
+              <div style="display:inline-flex; align-items:center; gap:6px;">
+                <span class="id-chip">${shown}</span>
+                <button class="act-btn" title="Ver / Ocultar token" onclick="toggleReveal('${t.token_id}')">${SVG.eye}</button>
+                <button class="act-btn" title="Copiar token" onclick="copyTok('${t.token_id}', this)">${SVG.copy}</button>
+              </div>
+            </td>
             <td>${usageBadge}</td>
             <td>${dev1}</td>
             <td>${dev2}</td>
             <td>${pill}</td>
             <td style="text-align:right; white-space:nowrap;">
-              <button class="act-btn" title="Ver / Ocultar token" onclick="toggleReveal('${t.token_id}')">${SVG.eye}</button>
-              <button class="act-btn" title="Copiar token" onclick="copyTok('${t.token_id}')">${SVG.copy}</button>
               <button class="act-btn" title="Ver incidentes" onclick="openTokenIncidents('${t.token_id}')">${SVG.incident}</button>
               <button class="act-btn act-btn-del" title="Eliminar token" onclick="deleteMyToken('${t.token_id}')">${SVG.trash}</button>
             </td>
