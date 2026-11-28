@@ -3,31 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AegisQRO — Cuentas Empresariales y Pool de Tokens</title>
+  <title>AEGISQRO — Cuentas y Tokens</title>
   <style>
-    :root {
-      --bg: #0B0F14;
-      --surface: #111823;
-      --elevated: #1E293B;
-      --text: #E2E8F0;
-      --muted: #94A3B8;
-      --cyan: #22D3EE;
-      --green: #34D399;
-      --amber: #F59E0B;
-      --red: #EF4444;
-    }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      background: #F8FAFC;
+      color: #0F172A;
       line-height: 1.5;
     }
     .navbar {
-      background: var(--surface);
-      border-bottom: 2px solid var(--elevated);
-      padding: 14px 28px;
+      background: #FFFFFF;
+      border-bottom: 1px solid #E2E8F0;
+      padding: 12px 32px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -35,179 +24,305 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 16px;
-      font-weight: 800;
-      color: var(--text);
-      letter-spacing: 0.03em;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0F172A;
     }
-    .brand svg { color: var(--cyan); }
-    .nav-links { display: flex; gap: 10px; }
-    .nav-btn {
+    .brand svg { color: #0F172A; }
+    .brand-sep { color: #CBD5E1; font-weight: 400; margin: 0 2px; }
+    .brand-sub { color: #64748B; font-weight: 500; font-size: 13.5px; }
+
+    .nav-segmented {
+      display: inline-flex;
+      background: #F1F5F9;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .nav-tab {
       display: inline-flex;
       align-items: center;
-      gap: 7px;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 700;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 600;
       text-decoration: none;
-      color: var(--muted);
-      background: var(--bg);
-      border: 1px solid var(--elevated);
+      color: #475569;
+      transition: all 0.15s ease;
     }
-    .nav-btn.active {
-      background: var(--cyan);
-      color: var(--bg);
-      border-color: var(--cyan);
+    .nav-tab.active {
+      background: #0F2942;
+      color: #FFFFFF;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
     }
-    .nav-btn:hover:not(.active) {
-      background: var(--elevated);
-      color: var(--text);
+    .nav-tab:hover:not(.active) {
+      color: #0F172A;
     }
-    .container { max-width: 1140px; margin: 28px auto; padding: 0 20px 60px; }
+
+    .container {
+      max-width: 1120px;
+      margin: 28px auto;
+      padding: 0 24px 60px;
+    }
+
     .card {
-      background: var(--surface);
-      border: 1px solid var(--elevated);
-      border-radius: 12px;
-      padding: 22px;
-      margin-bottom: 20px;
-      overflow: hidden;
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      padding: 24px 26px;
+      margin-bottom: 24px;
     }
-    h2 { margin: 0 0 6px; font-size: 16px; color: var(--text); }
-    .sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
-    .form-grid {
+    .card h2 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #0F172A;
+      letter-spacing: -0.01em;
+    }
+    .card-desc {
+      font-size: 13px;
+      color: #64748B;
+      margin: 0 0 18px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #F1F5F9;
+    }
+
+    .form-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
-      gap: 12px;
+      grid-template-columns: 1.5fr 1.5fr 0.9fr 1.2fr auto;
+      gap: 14px;
       align-items: end;
     }
-    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+    @media (max-width: 900px) {
+      .form-row { grid-template-columns: 1fr 1fr; }
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
     input {
       width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--elevated);
-      color: var(--text);
-      padding: 10px 12px;
-      border-radius: 8px;
+      background: #FFFFFF;
+      border: 1px solid #CBD5E1;
+      color: #0F172A;
+      padding: 9px 12px;
+      border-radius: 7px;
       font-size: 13.5px;
+      font-family: inherit;
     }
-    input::placeholder { color: var(--muted); }
-    input:focus { outline: 2px solid var(--cyan); border-color: var(--cyan); }
-    .btn {
-      background: var(--cyan);
-      color: var(--bg);
+    input::placeholder { color: #94A3B8; }
+    input:focus {
+      outline: none;
+      border-color: #0F2942;
+      box-shadow: 0 0 0 2px rgba(15, 41, 66, 0.1);
+    }
+
+    .btn-primary {
+      background: #0F2942;
+      color: #FFFFFF;
       border: none;
-      padding: 10px 18px;
-      border-radius: 8px;
-      font-size: 13.5px;
-      font-weight: 800;
+      padding: 9.5px 18px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
-      width: 100%;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 7px;
+      white-space: nowrap;
+      height: 38px;
     }
-    .btn:hover { background: var(--green); color: var(--bg); }
+    .btn-primary:hover { background: #163A5C; }
+    .btn-cancel {
+      background: #F1F5F9;
+      color: #475569;
+      border: 1px solid #CBD5E1;
+      padding: 0 12px;
+      border-radius: 7px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      height: 38px;
+    }
 
-    .icon-btn {
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
+    .section-block {
+      margin-bottom: 26px;
+    }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-size: 15.5px;
+      font-weight: 700;
+      color: #0F172A;
+      margin: 0;
+    }
+    .section-meta {
+      font-size: 12.5px;
+      color: #64748B;
+    }
+
+    .table-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .table-scroll { width: 100%; overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      text-align: left;
+    }
+    th {
+      background: #F8FAFC;
+      color: #64748B;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 11px 16px;
+      border-bottom: 1px solid #E2E8F0;
+    }
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #F1F5F9;
+      vertical-align: middle;
+      color: #1E293B;
+      overflow-wrap: anywhere;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #FAFCFF; }
+
+    .id-chip {
+      display: inline-block;
+      font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+      font-size: 12px;
+      color: #334155;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      padding: 3px 8px;
+      border-radius: 5px;
+    }
+    .tok-mono {
+      font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+      font-size: 12.5px;
+      color: #1E293B;
+    }
+    .num-mono {
+      font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .pill svg { width: 13px; height: 13px; }
+    .pill-green {
+      background: #DCFCE7;
+      color: #15803D;
+    }
+    .pill-gray {
+      background: #F1F5F9;
+      color: #475569;
+    }
+    .pill-red {
+      background: #FEE2E2;
+      color: #B91C1C;
+    }
+
+    .actions-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .act-btn {
+      width: 30px;
+      height: 30px;
+      border: none;
+      background: transparent;
+      color: #475569;
+      border-radius: 6px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      border: 1px solid var(--elevated);
-      background: var(--elevated);
       padding: 0;
     }
-    .icon-btn svg { width: 16px; height: 16px; }
-    .icon-edit { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
-    .icon-warn { background: var(--amber); color: var(--bg); border-color: var(--amber); }
-    .icon-enable { background: var(--green); color: var(--bg); border-color: var(--green); }
-    .icon-del { background: var(--red); color: var(--bg); border-color: var(--red); }
-    .actions-cell { display: flex; gap: 8px; align-items: center; }
+    .act-btn:hover {
+      background: #F1F5F9;
+      color: #0F172A;
+    }
+    .act-btn-del:hover {
+      background: #FEE2E2;
+      color: #DC2626;
+    }
+    .act-btn svg { width: 15px; height: 15px; }
 
-    .status-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
+    .key-icon {
+      color: #475569;
       display: inline-flex;
       align-items: center;
-      justify-content: center;
     }
-    .status-icon svg { width: 15px; height: 15px; }
-    .st-active { background: var(--green); color: var(--bg); }
-    .st-avail { background: var(--cyan); color: var(--bg); }
-    .st-warn { background: var(--amber); color: var(--bg); }
-    .st-off { background: var(--red); color: var(--bg); }
+    .key-icon svg { width: 15px; height: 15px; }
 
-    .table-scroll { width: 100%; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 13.5px; text-align: left; }
-    th {
-      background: var(--elevated);
-      color: var(--muted);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      padding: 11px 12px;
-      border-bottom: 1px solid var(--elevated);
-    }
-    td {
-      padding: 12px;
-      border-bottom: 1px solid var(--elevated);
-      overflow-wrap: anywhere;
-      vertical-align: middle;
-    }
-    tr:hover td { background: var(--elevated); }
-    tr:last-child td { border-bottom: none; }
-    .mono {
-      font-family: "JetBrains Mono", Consolas, monospace;
-      font-size: 12px;
-      color: var(--cyan);
-      background: var(--bg);
-      padding: 4px 8px;
-      border-radius: 6px;
-      border: 1px solid var(--elevated);
-    }
-    .result-box {
+    .result-banner {
       display: none;
       margin-top: 16px;
-      background: var(--bg);
-      border: 2px solid var(--green);
-      border-radius: 10px;
-      padding: 14px 16px;
-      font-size: 13.5px;
+      background: #F0FDF4;
+      border: 1px solid #BBF7D0;
+      color: #166534;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
-  <nav class="navbar">
+  <header class="navbar">
     <div class="brand">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      AEGISQRO
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span>AEGISQRO</span>
+      <span class="brand-sep">/</span>
+      <span class="brand-sub">Consola Zero-Trust</span>
     </div>
-    <div class="nav-links">
-      <a href="/dashboard" class="nav-btn active">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    <nav class="nav-segmented">
+      <a href="/dashboard" class="nav-tab active">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         Cuentas y Tokens
       </a>
-      <a href="/db" class="nav-btn">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <a href="/db" class="nav-tab">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Datos Recibidos
       </a>
-    </div>
-  </nav>
+    </nav>
+  </header>
 
   <main class="container">
     <section class="card">
       <h2 id="formTitle">Crear Cuenta de Empresa</h2>
-      <div class="sub">Crea la cuenta empresarial, su contrasena temporal (SHA-256) y su pool de tokens en SQLite.</div>
+      <p class="card-desc">Crea la cuenta empresarial, su contrasena temporal (SHA-256) y su pool de tokens en SQLite.</p>
       <input type="hidden" id="editingCompanyId" value="" />
 
-      <div class="form-grid">
+      <div class="form-row">
         <div>
           <label>Nombre de la Empresa</label>
           <input type="text" id="inpName" placeholder="Ej. Corporativo QRO" />
@@ -225,67 +340,75 @@
           <input type="text" id="inpTempPw" placeholder="Vacio = autogenerar" />
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="btn" id="btnSubmitForm" onclick="submitAccountForm()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <button class="btn-primary" id="btnSubmitForm" onclick="submitAccountForm()">
+            <span style="font-size:15px; line-height:1;">+</span>
             <span id="btnSubmitLabel">Crear Cuenta</span>
           </button>
-          <button class="icon-btn icon-del" id="btnCancelEdit" title="Cancelar edicion" style="display:none; flex-shrink:0; height:39px; width:39px;" onclick="cancelEdit()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          <button class="btn-cancel" id="btnCancelEdit" style="display:none;" onclick="cancelEdit()">Cancelar</button>
         </div>
       </div>
 
-      <div id="createdResult" class="result-box"></div>
+      <div id="createdResult" class="result-banner"></div>
     </section>
 
-    <section class="card">
-      <h2>Cuentas Empresariales</h2>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>ID Cuenta</th>
-              <th>Empresa</th>
-              <th>Correo</th>
-              <th style="text-align:center;">Estado</th>
-              <th>Totales</th>
-              <th>Uso</th>
-              <th>Libres</th>
-              <th style="text-align:center;">Clave</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="accountsBody"></tbody>
-        </table>
+    <section class="section-block">
+      <div class="section-head">
+        <h3 class="section-title">Cuentas Empresariales</h3>
+        <span class="section-meta" id="accountsMeta">0 cuentas activas</span>
+      </div>
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>ID Cuenta</th>
+                <th>Empresa</th>
+                <th>Correo</th>
+                <th>Estado</th>
+                <th>Totales</th>
+                <th>Uso</th>
+                <th>Libres</th>
+                <th>Clave</th>
+                <th style="text-align:right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="accountsBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Pool de Tokens Generados</h2>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Cuenta Empresa</th>
-              <th>Token (SHA-256)</th>
-              <th style="text-align:center; width:90px;">Estado</th>
-            </tr>
-          </thead>
-          <tbody id="tokensBody"></tbody>
-        </table>
+    <section class="section-block">
+      <div class="section-head">
+        <h3 class="section-title">Pool de Tokens Generados</h3>
+        <span class="section-meta" id="tokensMeta">Mostrando 0 tokens</span>
+      </div>
+      <div class="table-card">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:28%;">Cuenta Empresa</th>
+                <th>Token (SHA-256)</th>
+                <th style="text-align:right;">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tokensBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
 
   <script>
-    const ICONS = {
-      check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-      clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
-      ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
-      key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
-      edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-      power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>',
-      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>'
+    const SVG = {
+      checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+      clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+      key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
+      edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>',
+      power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>',
+      trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>'
     };
 
     let cachedAccounts = [];
@@ -296,51 +419,56 @@
       cachedAccounts = data.accounts || [];
       const tokens = data.client_tokens || [];
 
+      const activeCount = cachedAccounts.filter(a => a.account_status === "ACTIVE").length;
+      document.getElementById("accountsMeta").textContent = `${activeCount} cuentas activas`;
+      document.getElementById("tokensMeta").textContent = `Mostrando ${tokens.length} de ${tokens.length} tokens`;
+
       document.getElementById("accountsBody").innerHTML = cachedAccounts.map(a => {
         const isActive = a.account_status === "ACTIVE";
-        const statusIcon = isActive
-          ? `<span class="status-icon st-active" title="Activa">${ICONS.check}</span>`
-          : `<span class="status-icon st-off" title="Inhabilitada">${ICONS.ban}</span>`;
-        const keyIcon = a.has_temp_password
-          ? `<span class="status-icon st-avail" title="Clave Temporal SHA-256">${ICONS.key}</span>`
-          : `<span class="status-icon st-warn" title="Pendiente">${ICONS.clock}</span>`;
+        const statePill = isActive
+          ? `<span class="pill pill-green">${SVG.checkCircle} Activa</span>`
+          : `<span class="pill pill-red">${SVG.ban} Inhabilitada</span>`;
+
+        const keyCell = a.has_temp_password
+          ? `<span class="key-icon" title="Contrasena temporal SHA-256 activa">${SVG.key}</span>`
+          : `<span style="color:#CBD5E1;">—</span>`;
 
         return `
           <tr>
-            <td><span class="mono">${a.company_id}</span></td>
+            <td><span class="id-chip">${a.company_id}</span></td>
             <td><strong>${a.company_name}</strong></td>
-            <td style="color:var(--muted);">${a.master_account_email}</td>
-            <td style="text-align:center;">${statusIcon}</td>
-            <td><strong>${a.total_allocated_tokens}</strong></td>
-            <td style="color:var(--green);"><strong>${a.active_tokens_used}</strong></td>
-            <td style="color:var(--cyan);"><strong>${a.available_tokens}</strong></td>
-            <td style="text-align:center;">${keyIcon}</td>
-            <td>
-              <div class="actions-cell">
-                <button class="icon-btn icon-edit" title="Editar" onclick="startEdit('${a.company_id}')">${ICONS.edit}</button>
-                <button class="icon-btn ${isActive ? 'icon-warn' : 'icon-enable'}" title="${isActive ? 'Inhabilitar' : 'Habilitar'}" onclick="toggleStatus('${a.company_id}', '${isActive ? 'DISABLED' : 'ACTIVE'}')">${ICONS.power}</button>
-                <button class="icon-btn icon-del" title="Eliminar" onclick="deleteAccount('${a.company_id}')">${ICONS.trash}</button>
+            <td style="color:#475569;">${a.master_account_email}</td>
+            <td>${statePill}</td>
+            <td><span class="num-mono" style="color:#0F172A;">${a.total_allocated_tokens}</span></td>
+            <td><span class="num-mono" style="color:#16A34A;">${a.active_tokens_used}</span></td>
+            <td><span class="num-mono" style="color:#1E3A8A;">${a.available_tokens}</span></td>
+            <td>${keyCell}</td>
+            <td style="text-align:right;">
+              <div class="actions-row">
+                <button class="act-btn" title="Editar" onclick="startEdit('${a.company_id}')">${SVG.edit}</button>
+                <button class="act-btn" title="${isActive ? 'Inhabilitar' : 'Habilitar'}" onclick="toggleStatus('${a.company_id}', '${isActive ? 'DISABLED' : 'ACTIVE'}')">${SVG.power}</button>
+                <button class="act-btn act-btn-del" title="Eliminar" onclick="deleteAccount('${a.company_id}')">${SVG.trash}</button>
               </div>
             </td>
           </tr>
         `;
-      }).join("") || '<tr><td colspan="9" style="color:var(--muted);">Sin cuentas registradas</td></tr>';
+      }).join("") || '<tr><td colspan="9" style="color:#94A3B8;">Sin cuentas registradas</td></tr>';
 
       document.getElementById("tokensBody").innerHTML = tokens.map(t => {
-        let stHtml = `<span class="status-icon st-avail" title="Disponible">${ICONS.clock}</span>`;
+        let pill = `<span class="pill pill-gray">${SVG.clock} Disponible</span>`;
         if (t.status === "ACTIVE") {
-          stHtml = `<span class="status-icon st-active" title="Activo">${ICONS.check}</span>`;
+          pill = `<span class="pill pill-green">${SVG.checkCircle} En uso</span>`;
         } else if (t.status === "SUSPENDED" || t.status === "REVOKED") {
-          stHtml = `<span class="status-icon st-off" title="Inhabilitado">${ICONS.ban}</span>`;
+          pill = `<span class="pill pill-red">${SVG.ban} Suspendido</span>`;
         }
         return `
           <tr>
-            <td><span class="mono">${t.company_id}</span></td>
-            <td><span class="mono">${t.token_id}</span></td>
-            <td style="text-align:center;">${stHtml}</td>
+            <td><span class="id-chip">${t.company_id}</span></td>
+            <td><span class="tok-mono">${t.token_id}</span></td>
+            <td style="text-align:right;">${pill}</td>
           </tr>
         `;
-      }).join("") || '<tr><td colspan="3" style="color:var(--muted);">Sin tokens</td></tr>';
+      }).join("") || '<tr><td colspan="3" style="color:#94A3B8;">Sin tokens generados</td></tr>';
     }
 
     function startEdit(companyId) {
@@ -353,7 +481,7 @@
       document.getElementById("inpTempPw").value = "";
       document.getElementById("formTitle").textContent = "Editar Cuenta: " + acc.company_name;
       document.getElementById("btnSubmitLabel").textContent = "Guardar";
-      document.getElementById("btnCancelEdit").style.display = "inline-flex";
+      document.getElementById("btnCancelEdit").style.display = "inline-block";
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -400,15 +528,13 @@
         const box = document.getElementById("createdResult");
         box.style.display = "block";
         const pwNote = data.temp_password
-          ? ` · Clave Temporal: <span class="mono" style="color:var(--text);font-weight:700;">${data.temp_password}</span>`
+          ? ` · Contrasena Temporal: <span class="id-chip" style="font-weight:700;">${data.temp_password}</span>`
           : "";
         box.innerHTML = `
-          <div style="color:var(--green); font-weight:700;">Cuenta guardada en SQLite</div>
-          <div style="margin-top:6px;">
-            ID: <span class="mono">${data.enterprise_account.company_id}</span> ·
-            Correo: <strong>${data.enterprise_account.master_account_email}</strong> ·
-            Tokens: <strong>${data.enterprise_account.total_allocated_tokens}</strong>${pwNote}
-          </div>
+          <strong>Cuenta guardada correctamente:</strong>
+          <span class="id-chip">${data.enterprise_account.company_id}</span> ·
+          ${data.enterprise_account.master_account_email} ·
+          ${data.enterprise_account.total_allocated_tokens} tokens${pwNote}
         `;
         cancelEdit();
         loadData();
