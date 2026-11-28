@@ -550,6 +550,16 @@ impl Database {
             _ => clean_emp.map(str::to_string).or(tok.assigned_employee_id.clone()),
         };
 
+        // Desvincular el dispositivo de cualquier otro token para evitar conflictos con el UNIQUE constraint
+        let _ = conn.execute(
+            "UPDATE enterprise_client_tokens SET assigned_device_id = NULL WHERE assigned_device_id = ?1 AND token_id != ?2",
+            params![device_id, tok.token_id],
+        );
+        let _ = conn.execute(
+            "UPDATE enterprise_client_tokens SET secondary_device_id = NULL WHERE secondary_device_id = ?1 AND token_id != ?2",
+            params![device_id, tok.token_id],
+        );
+
         if tok.assigned_device_id.as_deref() == Some(device_id)
             || tok.secondary_device_id.as_deref() == Some(device_id)
         {
@@ -576,7 +586,7 @@ impl Database {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .unwrap_or(&tok.client_label);
-            let _ = conn.execute(
+            if let Err(e) = conn.execute(
                 "UPDATE enterprise_client_tokens
                  SET assigned_device_id = ?1,
                      assigned_employee_id = ?2,
@@ -587,7 +597,9 @@ impl Database {
                      hardware_id = COALESCE(?7, hardware_id)
                  WHERE token_id = ?6",
                 params![device_id, next_emp, next_label, next_plat, now, tok.token_id, hw],
-            );
+            ) {
+                return Err(format!("Error en base de datos al asignar Slot 1: {}", e));
+            }
             return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
         }
 
@@ -599,7 +611,7 @@ impl Database {
             } else {
                 format!("{} + {}", tok.platform, platform)
             };
-            let _ = conn.execute(
+            if let Err(e) = conn.execute(
                 "UPDATE enterprise_client_tokens
                  SET secondary_device_id = ?1,
                      assigned_employee_id = COALESCE(?2, assigned_employee_id),
@@ -609,7 +621,9 @@ impl Database {
                      hardware_id = COALESCE(?6, hardware_id)
                  WHERE token_id = ?5",
                 params![device_id, next_emp, next_plat, now, tok.token_id, hw],
-            );
+            ) {
+                return Err(format!("Error en base de datos al asignar Slot 2: {}", e));
+            }
             return Ok(self.find_enterprise_token_by_id(&tok.token_id).unwrap_or(tok));
         }
 
@@ -807,6 +821,16 @@ impl Database {
         let Some((tok_id, d1, d2, old_plat)) = candidate else {
             return false;
         };
+
+        // Desvincular de cualquier otro token previo
+        let _ = conn.execute(
+            "UPDATE enterprise_client_tokens SET assigned_device_id = NULL WHERE assigned_device_id = ?1 AND token_id != ?2",
+            params![device_id, tok_id],
+        );
+        let _ = conn.execute(
+            "UPDATE enterprise_client_tokens SET secondary_device_id = NULL WHERE secondary_device_id = ?1 AND token_id != ?2",
+            params![device_id, tok_id],
+        );
 
         let now = Utc::now().to_rfc3339();
         let hw = self.hardware_id_for_device(device_id);
